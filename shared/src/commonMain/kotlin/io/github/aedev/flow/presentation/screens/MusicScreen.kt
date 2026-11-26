@@ -27,6 +27,7 @@ import io.github.aedev.flow.resources.Res
 import io.github.aedev.flow.resources.action_search
 import io.github.aedev.flow.resources.moods_title
 import io.github.aedev.flow.resources.music_title
+import io.github.aedev.flow.resources.settings_title
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -43,6 +44,7 @@ internal fun MusicScreen(
     onOpenArtist: (artistId: String, name: String, thumbnailUrl: String?) -> Unit,
     onSearch: () -> Unit,
     onOpenMoods: () -> Unit,
+    onOpenSettings: () -> Unit,
     onOpenProfiles: () -> Unit,
 ) {
     var attempt by remember { mutableIntStateOf(0) }
@@ -69,16 +71,22 @@ internal fun MusicScreen(
                 )
             },
             actions = {
+                IconButton(onClick = onSearch) {
+                    Icon(
+                        imageVector = FlowIcons.Search,
+                        contentDescription = stringResource(Res.string.action_search),
+                    )
+                }
                 IconButton(onClick = onOpenMoods) {
                     Icon(
                         imageVector = FlowIcons.Genres,
                         contentDescription = stringResource(Res.string.moods_title),
                     )
                 }
-                IconButton(onClick = onSearch) {
+                IconButton(onClick = onOpenSettings) {
                     Icon(
-                        imageVector = FlowIcons.Search,
-                        contentDescription = stringResource(Res.string.action_search),
+                        imageVector = FlowIcons.SettingsOutlined,
+                        contentDescription = stringResource(Res.string.settings_title),
                     )
                 }
                 FlowProfileAction(onClick = onOpenProfiles)

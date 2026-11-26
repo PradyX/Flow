@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,7 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.aedev.flow.presentation.feed.MusicSection
 import io.github.aedev.flow.ui.theme.Dimensions
@@ -29,6 +28,11 @@ import io.github.aedev.flow.ui.theme.Dimensions
  * YouTube Music's shelves as the music surfaces draw them: a heading over a row of square cards.
  * The footer asks for the next page as it comes into view, which is how the app keeps its carousels
  * coming while the page still has a token.
+ *
+ * The heading carries the app's own section header: 12dp of padding above and below the title on
+ * the 12dp content inset, in the emphasized large title. Measured on the reference's music page,
+ * its first heading's text sits at 138..168 with the shelf starting at 184 and the next heading's
+ * text 16px under the shelf's last row, so shelves follow one another with no extra gap.
  */
 @Composable
 internal fun MusicSectionList(
@@ -40,20 +44,23 @@ internal fun MusicSectionList(
     onOpenVideo: (videoId: String, title: String, thumbnailUrl: String?) -> Unit,
     onOpenArtist: (artistId: String, name: String, thumbnailUrl: String?) -> Unit,
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = Dimensions.SectionSpacing),
-        verticalArrangement = Arrangement.spacedBy(MusicSectionSpacing),
-    ) {
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
         itemsIndexed(sections) { index, section ->
             Column {
                 Text(
                     text = section.title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.titleLargeEmphasized,
                     color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.padding(horizontal = Dimensions.ContentPaddingHorizontal),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier =
+                        Modifier.padding(
+                            start = Dimensions.ContentPaddingHorizontal,
+                            end = Dimensions.ContentPaddingHorizontal,
+                            top = Dimensions.ContentPaddingVertical,
+                            bottom = Dimensions.ContentPaddingVertical,
+                        ),
                 )
-                Spacer(modifier = Modifier.height(8.dp))
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = Dimensions.ContentPaddingHorizontal),
                     horizontalArrangement = Arrangement.spacedBy(MusicCardSpacing),
