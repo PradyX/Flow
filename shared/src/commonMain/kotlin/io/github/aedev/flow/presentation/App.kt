@@ -651,6 +651,7 @@ fun App(
                                         onOpenChannel = { channelId, name ->
                                             router.push(AppDestination.Channel(channelId, name))
                                         },
+                                        onOpenProfiles = { showProfiles = true },
                                         onUnsubscribe = { channel ->
                                             val next = subscriptions.without(channel.id)
                                             saveSubscriptions(next)

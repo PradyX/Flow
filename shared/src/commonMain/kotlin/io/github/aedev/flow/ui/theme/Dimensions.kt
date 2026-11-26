@@ -23,6 +23,24 @@ object Dimensions {
     /** The feed's own side inset; a band inside the feed adds the content padding on top. */
     val FeedSideInset: Dp = 4.dp
 
+    /**
+     * The narrowest cell the subscriptions feed allows: two cells across a phone's width, each a
+     * card plus its inset on both sides, so a list row's still is one cell below the full width.
+     */
+    val FeedMinCardWidth: Dp = 272.dp
+
+    /** A feed row's vertical padding: the space above and below its still. */
+    val FeedRowVerticalPadding: Dp = 8.dp
+
+    /** The gap between a feed row's title and the lines under it. */
+    val FeedRowTitleGap: Dp = 6.dp
+
+    /** One action slot of a screen bar: the width an icon button takes beside its neighbours. */
+    val BarActionSlot: Dp = 48.dp
+
+    /** The still of a feed row that has no grid to take its width from. */
+    val FeedRowThumbnailWidth: Dp = 272.dp
+
     val ContentPaddingHorizontal: Dp = 12.dp
     val ContentPaddingVertical: Dp = 12.dp
     val ItemSpacing: Dp = 12.dp

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -57,6 +58,7 @@ import io.github.aedev.flow.presentation.feed.SubscriptionsFeedState
 import io.github.aedev.flow.presentation.feed.loadSubscriptions
 import io.github.aedev.flow.presentation.ui.ChannelAvatar
 import io.github.aedev.flow.presentation.ui.FlowIcons
+import io.github.aedev.flow.presentation.ui.FlowProfileAction
 import io.github.aedev.flow.presentation.ui.FlowSubscribeButton
 import io.github.aedev.flow.presentation.ui.FlowTopBar
 import io.github.aedev.flow.resources.Res
@@ -73,13 +75,14 @@ import io.github.aedev.flow.resources.subscriptions_no_videos
 import io.github.aedev.flow.resources.subscriptions_quick_access_title
 import io.github.aedev.flow.resources.subscriptions_search_placeholder
 import io.github.aedev.flow.resources.subscriptions_title
+import io.github.aedev.flow.resources.subscriptions_view_mode
 import io.github.aedev.flow.resources.unsubscribed_from_template
 import io.github.aedev.flow.ui.theme.Dimensions
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
-private const val SUBSCRIPTIONS_COLUMNS = 3
+private const val SUBSCRIPTIONS_MAX_COLUMNS = 2
 private const val STRIP_ITEM_WIDTH = 64
 private const val STRIP_AVATAR_DIAMETER = 56
 private const val MANAGE_AVATAR_DIAMETER = 48
@@ -94,9 +97,9 @@ private val ManageActionSpacing = 8.dp
 
 /**
  * Subscriptions, the app's tab: a Quick access row of the channels the viewer subscribed to, then
- * their recent uploads merged newest first, in the same three-column cards Home uses. Searching
- * subscriptions — the app's manage mode — lists one row per channel and unsubscribes from there,
- * with the same Undo the app offers.
+ * their recent uploads merged newest first, in the list rows or the two-column grid the app's own
+ * view mode toggle switches between. Searching subscriptions — the app's manage mode — lists one
+ * row per channel and unsubscribes from there, with the same Undo the app offers.
  */
 @Composable
 internal fun SubscriptionsScreen(
@@ -104,11 +107,13 @@ internal fun SubscriptionsScreen(
     channels: List<Subscription>,
     onOpenVideo: (videoId: String, title: String, thumbnailUrl: String?) -> Unit,
     onOpenChannel: (channelId: String, name: String) -> Unit,
+    onOpenProfiles: () -> Unit = {},
     onUnsubscribe: (Subscription) -> Unit = {},
     onRestoreSubscription: (Subscription, index: Int) -> Unit = { _, _ -> },
 ) {
     var attempt by remember { mutableIntStateOf(0) }
     var managing by remember { mutableStateOf(false) }
+    var view by remember { mutableStateOf(SubscriptionsView.ROWS) }
     var query by remember { mutableStateOf("") }
 
     // Setup is the only place the port subscribes, so its channel list is the whole subscription
@@ -148,12 +153,31 @@ internal fun SubscriptionsScreen(
                 )
             },
             actions = {
+                IconButton(
+                    onClick = {
+                        view =
+                            if (view == SubscriptionsView.ROWS) {
+                                SubscriptionsView.GRID
+                            } else {
+                                SubscriptionsView.ROWS
+                            }
+                    },
+                ) {
+                    Icon(
+                        imageVector = if (view == SubscriptionsView.ROWS) FlowIcons.GridView else FlowIcons.ListView,
+                        contentDescription = stringResource(Res.string.subscriptions_view_mode),
+                    )
+                }
                 IconButton(onClick = { managing = true }) {
                     Icon(
                         imageVector = FlowIcons.Search,
                         contentDescription = stringResource(Res.string.search_subscriptions),
                     )
                 }
+                // The app's third disc opens its notifications page. The port has no notifications
+                // feed, so that disc's slot stays empty and the discs either side keep its frames.
+                Spacer(modifier = Modifier.width(Dimensions.BarActionSlot))
+                FlowProfileAction(onClick = onOpenProfiles)
             },
         )
 
@@ -182,10 +206,13 @@ internal fun SubscriptionsScreen(
                     }
 
                     else -> {
-                        SubscriptionsGrid(feed = feed, onOpenVideo = onOpenVideo, onOpenChannel = onOpenChannel, onViewAll = {
-                            managing =
-                                true
-                        })
+                        SubscriptionsFeed(
+                            feed = feed,
+                            view = view,
+                            onOpenVideo = onOpenVideo,
+                            onOpenChannel = onOpenChannel,
+                            onViewAll = { managing = true },
+                        )
                     }
                 }
             }
@@ -354,44 +381,70 @@ internal fun manageChannels(
     return channels.filter { it.name.contains(trimmed, ignoreCase = true) }
 }
 
+/** How the feed lays its uploads out: the app's list rows, or the grid its toggle switches to. */
+private enum class SubscriptionsView { ROWS, GRID }
+
+/**
+ * The feed under the header band. Its columns come from the window, the same way the app derives
+ * them: as many cells as fit at [Dimensions.FeedMinCardWidth], capped at
+ * [SUBSCRIPTIONS_MAX_COLUMNS]. A row's still is one of those cells minus its two insets, so a row
+ * lines up with the grid above it and its text starts where the grid's second column does.
+ */
 @Composable
-private fun SubscriptionsGrid(
+private fun SubscriptionsFeed(
     feed: SubscriptionsFeed,
+    view: SubscriptionsView,
     onOpenVideo: (videoId: String, title: String, thumbnailUrl: String?) -> Unit,
     onOpenChannel: (channelId: String, name: String) -> Unit,
     onViewAll: () -> Unit,
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(SUBSCRIPTIONS_COLUMNS),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding =
-            PaddingValues(
-                start = Dimensions.FeedSideInset,
-                end = Dimensions.FeedSideInset,
-                top = Dimensions.FeedTopPadding,
-                bottom = Dimensions.SectionSpacing,
-            ),
-        horizontalArrangement = Arrangement.spacedBy(GridSpacing),
-        verticalArrangement = Arrangement.spacedBy(GridSpacing),
-    ) {
-        item(key = "quick_access", span = { GridItemSpan(maxLineSpan) }) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                QuickAccessHeader(
-                    channels = feed.channels,
-                    onOpenChannel = onOpenChannel,
-                    onViewAll = onViewAll,
-                )
-                HorizontalDivider()
-                SubscriptionGroupRow()
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val available = (maxWidth - Dimensions.FeedSideInset * 2).coerceAtLeast(0.dp)
+        val columns = (available / Dimensions.FeedMinCardWidth).toInt().coerceIn(1, SUBSCRIPTIONS_MAX_COLUMNS)
+        val rowThumbnailWidth = available / columns - Dimensions.ContentPaddingHorizontal * 2
+        val rows = view == SubscriptionsView.ROWS
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(if (rows) 1 else columns),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding =
+                PaddingValues(
+                    start = Dimensions.FeedSideInset,
+                    end = Dimensions.FeedSideInset,
+                    top = Dimensions.FeedTopPadding,
+                    bottom = Dimensions.SectionSpacing,
+                ),
+            verticalArrangement = Arrangement.spacedBy(if (rows) 0.dp else Dimensions.ItemSpacing),
+        ) {
+            item(key = "quick_access", span = { GridItemSpan(maxLineSpan) }) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    QuickAccessHeader(
+                        channels = feed.channels,
+                        onOpenChannel = onOpenChannel,
+                        onViewAll = onViewAll,
+                    )
+                    HorizontalDivider()
+                    SubscriptionGroupRow()
+                }
             }
-        }
-        items(feed.videos, key = { video -> video.entry.id }) { video ->
-            VideoCard(
-                entry = video.entry,
-                onOpen = onOpenVideo,
-                channelName = video.channelName,
-                channelAvatarUrl = video.channelAvatarUrl,
-            )
+            items(feed.videos, key = { video -> video.entry.id }) { video ->
+                if (rows) {
+                    VideoRowCard(
+                        entry = video.entry,
+                        onOpen = onOpenVideo,
+                        onOpenPlaylist = { _, _, _ -> },
+                        thumbnailWidth = rowThumbnailWidth,
+                        channelName = video.channelName,
+                        onOpenChannel = { onOpenChannel(video.channelId, video.channelName) },
+                    )
+                } else {
+                    VideoCard(
+                        entry = video.entry,
+                        onOpen = onOpenVideo,
+                        channelName = video.channelName,
+                        channelAvatarUrl = video.channelAvatarUrl,
+                    )
+                }
+            }
         }
     }
 }

@@ -168,6 +168,7 @@
     <string name="view_all_button_label">View all</string>
     <string name="search_subscriptions">Search subscriptions</string>
     <string name="subscriptions_search_placeholder">Search subscriptions</string>
+    <string name="subscriptions_view_mode">Toggle view mode</string>
     <string name="no_subscriptions_found">No subscriptions found</string>
     <string name="unsubscribed_from_template">Unsubscribed from %1$s</string>
     <plurals name="channels_count">

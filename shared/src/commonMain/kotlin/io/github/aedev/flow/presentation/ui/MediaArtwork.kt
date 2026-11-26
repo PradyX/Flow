@@ -127,13 +127,17 @@ internal fun DurationBadge(
     }
 }
 
-private fun monogram(title: String): String =
-    title
-        .trim()
-        .firstOrNull()
-        ?.uppercaseChar()
-        ?.toString()
-        .orEmpty()
+/**
+ * The letter a still shows before its image arrives. A title can open with an emoji, which is two
+ * chars: taking a single char would leave half a surrogate pair, and a string holding one is not
+ * encodable — it throws in the platform's XML writer, the accessibility dump among them.
+ */
+private fun monogram(title: String): String {
+    val trimmed = title.trim()
+    if (trimmed.isEmpty()) return ""
+    val end = if (trimmed[0].isHighSurrogate() && trimmed.length > 1 && trimmed[1].isLowSurrogate()) 2 else 1
+    return trimmed.substring(0, end).uppercase()
+}
 
 /** `754` seconds as `12:34`, and anything past an hour as `1:02:03`. */
 internal fun durationText(seconds: Int): String {

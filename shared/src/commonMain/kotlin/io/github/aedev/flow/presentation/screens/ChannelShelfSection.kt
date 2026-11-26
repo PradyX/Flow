@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
@@ -15,16 +17,20 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import io.github.aedev.flow.innertube.pages.renderer.CommunityPost
 import io.github.aedev.flow.presentation.feed.ChannelShelf
 import io.github.aedev.flow.presentation.feed.FeedEntry
 import io.github.aedev.flow.presentation.ui.ChannelNavRow
+import io.github.aedev.flow.presentation.ui.DurationBadge
+import io.github.aedev.flow.presentation.ui.MediaArtwork
+import io.github.aedev.flow.presentation.ui.durationText
+import io.github.aedev.flow.ui.theme.Dimensions
 
 private val ChannelContentPadding = 12.dp
 private val ChannelGridSpacing = 12.dp
@@ -151,14 +157,19 @@ internal fun ChannelCardRow(
 }
 
 /**
- * The list layout the grid/list control switches to: the still on the left, the title and its
- * byline on the right, so a row reads top to bottom instead of two cards abreast.
+ * The list layout a feed switches to: the still on the left, then the title, the channel the upload
+ * came from and its byline, so a row reads top to bottom instead of two cards abreast.
+ * [thumbnailWidth] is the row's still, one column of the grid it sits in; [onOpenChannel] makes the
+ * channel line under a row's title open that channel, as the app's rows do.
  */
 @Composable
 internal fun VideoRowCard(
     entry: FeedEntry,
     onOpen: (videoId: String, title: String, thumbnailUrl: String?) -> Unit,
     onOpenPlaylist: (playlistId: String, title: String, thumbnailUrl: String?) -> Unit,
+    thumbnailWidth: Dp = Dimensions.FeedRowThumbnailWidth,
+    channelName: String? = null,
+    onOpenChannel: (() -> Unit)? = null,
 ) {
     val videoId = entry.videoId
     val playlistId = entry.playlistId
@@ -172,23 +183,51 @@ internal fun VideoRowCard(
                         videoId != null -> onOpen(videoId, entry.title, thumbnailUrl)
                         playlistId != null -> onOpenPlaylist(playlistId, entry.title, thumbnailUrl)
                     }
-                }.padding(horizontal = ChannelContentPadding, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                }.padding(
+                    start = Dimensions.ContentPaddingHorizontal,
+                    top = Dimensions.FeedRowVerticalPadding,
+                    bottom = Dimensions.FeedRowVerticalPadding,
+                ),
     ) {
-        AsyncImage(
-            model = thumbnailUrl,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.width(160.dp).aspectRatio(16f / 9f),
-        )
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box(modifier = Modifier.width(thumbnailWidth).aspectRatio(16f / 9f)) {
+            MediaArtwork(
+                title = entry.title,
+                imageUrl = thumbnailUrl,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxSize(),
+            )
+            (entry.overlayText ?: entry.durationSeconds?.let(::durationText))?.let { pill ->
+                DurationBadge(
+                    text = pill,
+                    modifier = Modifier.align(Alignment.BottomEnd),
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(Dimensions.ContentPaddingHorizontal))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = entry.title,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onBackground,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            Spacer(modifier = Modifier.height(Dimensions.FeedRowTitleGap))
+            if (channelName != null) {
+                Text(
+                    text = channelName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier =
+                        if (onOpenChannel != null) {
+                            Modifier.clickable(onClick = onOpenChannel)
+                        } else {
+                            Modifier
+                        },
+                )
+            }
             entry.subtitle?.takeIf { it.isNotBlank() }?.let { subtitle ->
                 Text(
                     text = subtitle,
