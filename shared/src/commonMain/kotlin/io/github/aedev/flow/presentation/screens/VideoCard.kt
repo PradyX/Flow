@@ -5,10 +5,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -42,9 +42,15 @@ import io.github.aedev.flow.resources.home_action_undo_not_interested
 import io.github.aedev.flow.resources.home_card_more_actions
 import org.jetbrains.compose.resources.stringResource
 
+/** The card's own side inset; the grid pads itself by the window margin minus this value. */
+private val CardInset = 12.dp
+private val CardAvatarSize = 40.dp
+private val CardAvatarTarget = 48.dp
+private val CardDetailSpacing = 8.dp
+
 /**
- * A video card in the app's stacked shape: 16:9 thumbnail with the duration pill, a two-line title
- * and the channel/views/date line beneath.
+ * A video card in the app's stacked shape: a 16:9 thumbnail with the duration pill, then the
+ * channel, a two-line title and the metadata line, with the card menu on the right.
  */
 @Composable
 internal fun VideoCard(
@@ -87,9 +93,10 @@ internal fun VideoCard(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .padding(horizontal = CardInset)
                 .clickable(enabled = opensPlaylist || videoId != null) {
                     if (opensPlaylist) {
-                        onOpenPlaylist?.invoke(playlistId, entry.title, entry.thumbnailUrl)
+                        onOpenPlaylist(playlistId, entry.title, entry.thumbnailUrl)
                     } else {
                         videoId?.let { onOpen(it, entry.title, entry.thumbnailUrl) }
                     }
@@ -109,21 +116,58 @@ internal fun VideoCard(
                 )
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.Top) {
-            Text(
-                text = entry.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = if (channelName != null) CardDetailSpacing else CardInset,
+                        top = 12.dp,
+                        bottom = 12.dp,
+                    ),
+            verticalAlignment = Alignment.Top,
+        ) {
+            if (channelName != null) {
+                // The avatar's tap target is 48 dp; the 40 dp image centres inside it, as it does
+                // on the reference card, so the title lines up on both.
+                Box(modifier = Modifier.size(CardAvatarTarget)) {
+                    MediaArtwork(
+                        title = channelName,
+                        imageUrl = channelAvatarUrl,
+                        shape = CircleShape,
+                        modifier = Modifier.size(CardAvatarSize).align(Alignment.Center),
+                    )
+                }
+            }
+            Column(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .padding(start = if (channelName != null) CardDetailSpacing else 0.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = entry.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                cardMetaLine(channelName, entry.subtitle)?.let { meta ->
+                    Text(
+                        text = meta,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
             if (hasMenu) {
                 Box {
                     IconButton(
                         onClick = { menuOpen = true },
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier.offset(y = (-12).dp),
                     ) {
                         Icon(
                             imageVector = FlowIcons.MoreVert,
@@ -169,44 +213,15 @@ internal fun VideoCard(
                 }
             }
         }
-        if (channelName != null) {
-            ChannelLine(name = channelName, avatarUrl = channelAvatarUrl)
-        }
-        entry.subtitle?.takeIf { it.isNotBlank() }?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
     }
 }
 
-/** The card's channel row: a small portrait when YouTube sent one, then the channel's name. */
-@Composable
-private fun ChannelLine(
-    name: String,
-    avatarUrl: String?,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.padding(top = 4.dp),
-    ) {
-        MediaArtwork(
-            title = name,
-            imageUrl = avatarUrl,
-            shape = CircleShape,
-            modifier = Modifier.size(20.dp),
-        )
-        Text(
-            text = name,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
+/** The line under a card's title: the channel, then whatever else the surface knows about it. */
+private fun cardMetaLine(
+    channelName: String?,
+    subtitle: String?,
+): String? =
+    listOfNotNull(
+        channelName?.takeIf { it.isNotBlank() },
+        subtitle?.takeIf { it.isNotBlank() },
+    ).joinToString(" • ").takeIf { it.isNotBlank() }

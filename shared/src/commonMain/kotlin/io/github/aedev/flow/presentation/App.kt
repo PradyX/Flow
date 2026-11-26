@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -132,6 +133,7 @@ import io.github.aedev.flow.presentation.ui.isVideoPlaybackSupported
 import io.github.aedev.flow.resources.Res
 import io.github.aedev.flow.resources.action_search
 import io.github.aedev.flow.resources.app_name_uppercase
+import io.github.aedev.flow.resources.settings_title
 import io.github.aedev.flow.resources.shorts_title
 import io.github.aedev.flow.ui.theme.FlowTheme
 import kotlinx.coroutines.launch
@@ -611,6 +613,17 @@ fun App(
                                         onOpenVideo = { videoId, title, thumbnailUrl ->
                                             openVideo(videoId, title, thumbnailUrl)
                                         },
+                                        continueWatching =
+                                            history.entries
+                                                .filter { it.positionMs > 0 }
+                                                .take(10),
+                                        onOpenHistoryEntry = { entry ->
+                                            openVideo(entry.videoId, entry.title, entry.thumbnailUrl)
+                                        },
+                                        onRemoveHistoryEntry = { videoId ->
+                                            saveHistory(history.without(videoId))
+                                        },
+                                        onOpenHistory = { router.push(AppDestination.History) },
                                     )
                                 }
 
@@ -1188,16 +1201,16 @@ private fun TopBar(
             FlowTopBar(
                 title = { HomeWordmark() },
                 actions = {
-                    IconButton(onClick = { router.push(AppDestination.Shorts) }) {
-                        Icon(
-                            imageVector = FlowIcons.Play,
-                            contentDescription = stringResource(Res.string.shorts_title),
-                        )
-                    }
                     IconButton(onClick = { router.openTab(AppDestination.Search) }) {
                         Icon(
                             imageVector = FlowIcons.Search,
                             contentDescription = stringResource(Res.string.action_search),
+                        )
+                    }
+                    IconButton(onClick = { router.push(AppDestination.Settings) }) {
+                        Icon(
+                            imageVector = FlowIcons.SettingsOutlined,
+                            contentDescription = stringResource(Res.string.settings_title),
                         )
                     }
                     FlowProfileAction(onClick = onOpenProfiles)
@@ -1236,7 +1249,12 @@ private fun TopBar(
 /** The app's Home wordmark: the red mark, then FLOW tracked out in extra bold. */
 @Composable
 private fun HomeWordmark() {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        // The bar's leading slot carries more start padding than the reference app's, so the
+        // mark is pulled back to where the reference draws it.
+        modifier = Modifier.offset(x = (-12).dp),
+    ) {
         FlowLogoMark()
         Spacer(modifier = Modifier.width(8.dp))
         Text(

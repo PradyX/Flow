@@ -348,6 +348,7 @@
     <string name="home_feedback_not_interested">Noted, fewer videos like this</string>
     <string name="home_feedback_channel_hidden">Channel won\'t be recommended</string>
     <string name="history_title">History</string>
+    <string name="continue_watching_title">Continue Watching</string>
     <string name="history_empty">Videos you watch show up here.</string>
     <string name="history_clear">Clear history</string>
     <string name="history_remove">Remove from history</string>

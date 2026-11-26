@@ -2,14 +2,17 @@ package io.github.aedev.flow.presentation.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.SnackbarHost
@@ -25,7 +28,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import io.github.aedev.flow.data.history.WatchHistoryEntry
 import io.github.aedev.flow.data.model.Video
 import io.github.aedev.flow.data.taste.HomeFeedback
 import io.github.aedev.flow.data.taste.TasteChannel
@@ -49,12 +54,52 @@ import io.github.aedev.flow.resources.home_feedback_not_interested
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
-/** The app's Home grid: three columns of video cards, with its chip row above them. */
-private const val HOME_COLUMNS = 3
+/** The app's Home grid: as many columns of video cards as the window fits, chips above them. */
+private const val MAX_AUTO_COLUMNS = 4
 
+/** Narrowest a cell may be before the grid drops a column, the reference app's own minimum. */
+private val MinCardWidth = 272.dp
+
+/** The card's own side inset, repeated by the grid as its window margin. */
+private val CardInset = 12.dp
+private val CompactBreakpoint = 600.dp
+private val LargeBreakpoint = 840.dp
 private val GridSpacing = 12.dp
 private val ChipSpacing = 8.dp
-private val GridInset = 16.dp
+private val ChipRowHeight = 48.dp
+private val GridVerticalInset = 0.dp
+
+/** The gap between a card row and the next; cards carry their own bottom inset. */
+private val GridRowSpacing = 4.dp
+private val ChipRowInset = 12.dp
+
+/** One Home grid's column count, window margin and row spacing, derived from the window width. */
+private class HomeGrid(
+    val columns: Int,
+    val contentPadding: Dp,
+)
+
+private fun homeGrid(width: Dp): HomeGrid {
+    val compact = width < CompactBreakpoint
+    val margin =
+        when {
+            compact -> 0.dp
+            width >= LargeBreakpoint -> 24.dp
+            else -> 16.dp
+        }
+    val contentPadding = (margin - CardInset).coerceAtLeast(0.dp)
+    val available = (width - contentPadding * 2).coerceAtLeast(0.dp)
+    val columns =
+        if (compact) {
+            1
+        } else {
+            (available / MinCardWidth).toInt().coerceIn(1, MAX_AUTO_COLUMNS)
+        }
+    return HomeGrid(
+        columns = columns,
+        contentPadding = contentPadding,
+    )
+}
 
 @Composable
 internal fun HomeScreen(
@@ -63,6 +108,10 @@ internal fun HomeScreen(
     feedback: HomeFeedback,
     onFeedback: (HomeFeedback) -> Unit,
     onOpenVideo: (videoId: String, title: String, thumbnailUrl: String?) -> Unit,
+    continueWatching: List<WatchHistoryEntry> = emptyList(),
+    onOpenHistoryEntry: (WatchHistoryEntry) -> Unit = {},
+    onRemoveHistoryEntry: (String) -> Unit = {},
+    onOpenHistory: () -> Unit = {},
 ) {
     var attempt by remember { mutableIntStateOf(0) }
     val snackbar = remember { SnackbarHostState() }
@@ -109,23 +158,36 @@ internal fun HomeScreen(
             )
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val grid = homeGrid(maxWidth)
+        val readyVideos = (state.feed as? LoadState.Ready)?.value.orEmpty()
+        // The shelf spans the row after the first full one, the place the reference app puts it,
+        // so the row above it is never left with holes.
+        val slots =
+            remember(readyVideos, grid.columns, continueWatching.isNotEmpty()) {
+                buildList<Video?> {
+                    val columns = grid.columns.coerceAtLeast(1)
+                    addAll(readyVideos.take(columns))
+                    if (continueWatching.isNotEmpty()) add(null)
+                    addAll(readyVideos.drop(columns))
+                }
+            }
         LazyVerticalGrid(
-            columns = GridCells.Fixed(HOME_COLUMNS),
+            columns = GridCells.Fixed(grid.columns),
             state = state.gridState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = GridInset, vertical = GridSpacing),
-            horizontalArrangement = Arrangement.spacedBy(GridSpacing),
-            verticalArrangement = Arrangement.spacedBy(GridSpacing),
+            contentPadding = PaddingValues(horizontal = grid.contentPadding, vertical = GridVerticalInset),
+            verticalArrangement = Arrangement.spacedBy(GridRowSpacing),
         ) {
             item(key = "chips", span = { GridItemSpan(maxLineSpan) }) {
                 HomeChipRow(
                     selected = state.selectedChip,
                     onSelect = { chip -> state.selectedChip = chip },
+                    horizontalInset = (ChipRowInset - grid.contentPadding).coerceAtLeast(0.dp),
                 )
             }
 
-            when (val current = state.feed) {
+            when (state.feed) {
                 LoadState.Loading -> {
                     item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
                         LoadingState()
@@ -144,7 +206,20 @@ internal fun HomeScreen(
                 }
 
                 is LoadState.Ready -> {
-                    items(current.value, key = { video -> video.id }) { video ->
+                    itemsIndexed(
+                        items = slots,
+                        key = { _, video -> video?.id ?: "continue_watching" },
+                        span = { _, video -> if (video == null) GridItemSpan(maxLineSpan) else GridItemSpan(1) },
+                    ) { _, video ->
+                        if (video == null) {
+                            HomeContinueWatching(
+                                entries = continueWatching,
+                                onOpen = onOpenHistoryEntry,
+                                onRemove = onRemoveHistoryEntry,
+                                onSeeAll = onOpenHistory,
+                            )
+                            return@itemsIndexed
+                        }
                         VideoCard(
                             entry = videoCardEntry(video).copy(subtitle = homeMeta(video)),
                             onOpen = onOpenVideo,
@@ -196,11 +271,14 @@ private fun Video.channel(): TasteChannel = TasteChannel(channelId, channelName,
 private fun HomeChipRow(
     selected: HomeChip,
     onSelect: (HomeChip) -> Unit,
+    horizontalInset: Dp,
 ) {
     LazyRow(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().height(ChipRowHeight),
         horizontalArrangement = Arrangement.spacedBy(ChipSpacing),
-        contentPadding = PaddingValues(bottom = GridSpacing),
+        contentPadding =
+            PaddingValues(start = horizontalInset, end = horizontalInset),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         items(HomeChip.entries.toList(), key = { it.key }) { chip ->
             FilterChip(
@@ -234,7 +312,7 @@ private fun homeMeta(video: io.github.aedev.flow.data.model.Video): String? =
             }
         },
         video.uploadDate.takeIf { it.isNotBlank() },
-    ).joinToString(" · ").takeIf { it.isNotBlank() }
+    ).joinToString(" • ").takeIf { it.isNotBlank() }
 
 @Composable
 private fun chipLabel(chip: HomeChip): String =
