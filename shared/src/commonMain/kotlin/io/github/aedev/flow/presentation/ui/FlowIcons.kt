@@ -264,6 +264,11 @@ internal object FlowIcons {
         }
     }
 
+    /** The reel rail's comment mark: Material's outlined speech bubble. */
+    val Comment: ImageVector by lazy {
+        pathIcon("Comment", "M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z")
+    }
+
     /** The filled circle with a play cut out of it, as the Continue Watching header draws. */
     val PlayCircle: ImageVector by lazy {
         pathIcon("PlayCircle", "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z")
@@ -496,10 +501,10 @@ internal object FlowIcons {
             lineTo(5f, 21f)
             close()
             moveTo(7f, 5f)
-            lineTo(7f, 18f)
-            lineTo(12f, 15.8f)
-            lineTo(17f, 18f)
             lineTo(17f, 5f)
+            lineTo(17f, 18f)
+            lineTo(12f, 15.8f)
+            lineTo(7f, 18f)
             close()
         }
     }
@@ -997,30 +1002,15 @@ internal object FlowIcons {
         }
     }
 
+    /** The share mark: three nodes and the lines between them, as the app draws it. */
     val Share: ImageVector by lazy {
-        icon("Share") {
-            moveTo(14f, 3f)
-            lineTo(21f, 3f)
-            lineTo(21f, 10f)
-            lineTo(19f, 10f)
-            lineTo(19f, 6.4f)
-            lineTo(11.4f, 14f)
-            lineTo(10f, 12.6f)
-            lineTo(17.6f, 5f)
-            lineTo(14f, 5f)
-            close()
-            moveTo(5f, 5f)
-            lineTo(13f, 5f)
-            lineTo(13f, 7f)
-            lineTo(7f, 7f)
-            lineTo(7f, 19f)
-            lineTo(19f, 19f)
-            lineTo(19f, 13f)
-            lineTo(21f, 13f)
-            lineTo(21f, 21f)
-            lineTo(5f, 21f)
-            close()
-        }
+        pathIcon(
+            "Share",
+            "M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 " +
+                "1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 " +
+                "9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 " +
+                "0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z",
+        )
     }
 
     /** A clock face: the ring and the two hands, the mark the app uses for history. */

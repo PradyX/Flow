@@ -2,6 +2,7 @@ package io.github.aedev.flow.presentation.screens
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -89,7 +90,11 @@ class ShortsScreenUiTest {
             val store = inMemoryLibraryStore()
             setContent {
                 MaterialTheme {
-                    ShortsScreen(libraryStore = store, onBack = {})
+                    ShortsScreen(
+                        libraryStore = store,
+                        onOpenVideo = { _, _, _ -> },
+                        onOpenChannel = { _, _ -> },
+                    )
                 }
             }
 
@@ -111,17 +116,25 @@ class ShortsScreenUiTest {
                 "the saved reel is not in the saved-shorts collection",
             )
 
-            onNodeWithTag(SHORTS_PAGER_TEST_TAG).performTouchInput { swipeUp() }
+            onNodeWithTag(SHORTS_PAGER_TEST_TAG).performTouchInput { swipeUp(durationMillis = 600) }
 
             waitUntil(timeoutMillis = 5_000) {
                 onAllNodesWithText(secondChannel).fetchSemanticsNodes().isNotEmpty()
             }
             onNodeWithText(secondChannel).assertExists()
             onNodeWithTag(shortStillTag(secondId)).assertExists()
-            // The reel that swiped away is no longer the page on screen.
+            waitUntil(timeoutMillis = 5_000) {
+                onAllNodesWithTag(shortStillTag(secondId), useUnmergedTree = true)
+                    .fetchSemanticsNodes()
+                    .any { it.boundsInRoot.width > 0f }
+            }
+            // The reel that swiped away is no longer the frame on screen; the pager may hold its
+            // node for a frame after the settle, so the check is on what is actually laid out.
             assertTrue(
-                onAllNodesWithText(firstChannel).fetchSemanticsNodes().isEmpty(),
-                "the first reel is still visible after paging",
+                onAllNodesWithTag(shortStillTag(firstId), useUnmergedTree = true)
+                    .fetchSemanticsNodes()
+                    .none { it.boundsInRoot.width > 0f },
+                "the first reel is still on screen after paging",
             )
         }
 

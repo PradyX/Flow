@@ -832,7 +832,12 @@ fun App(
                                 AppDestination.Shorts -> {
                                     ShortsScreen(
                                         libraryStore = libraryStore,
-                                        onBack = { router.pop() },
+                                        onOpenVideo = { videoId, title, thumbnailUrl ->
+                                            openVideo(videoId, title, thumbnailUrl)
+                                        },
+                                        onOpenChannel = { channelId, name ->
+                                            router.push(AppDestination.Channel(channelId, name))
+                                        },
                                     )
                                 }
 

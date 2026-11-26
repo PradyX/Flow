@@ -23,6 +23,9 @@ import io.github.aedev.flow.innertube.pages.renderer.FeedShelf
 import io.github.aedev.flow.innertube.pages.renderer.FeedShelfStyle
 import io.github.aedev.flow.innertube.utils.parseTime
 import io.github.aedev.flow.utils.formatViewCount
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
@@ -541,9 +544,16 @@ data class Short(
     val title: String,
     val channelName: String?,
     val channelId: String?,
+    val channelAvatarUrl: String? = null,
     val stillUrl: String,
     val likeCountText: String? = null,
     val commentCountText: String? = null,
+    /** The watch page's own view count, "24M views". */
+    val viewCountText: String? = null,
+    /** "1 month ago", the age the watch page prints beside the views. */
+    val publishedTimeText: String? = null,
+    /** The track the reel plays, as its overlay names it. */
+    val soundTitle: String? = null,
     val params: String? = null,
 )
 
@@ -570,20 +580,36 @@ suspend fun loadShorts(limit: Int = 3): Result<ShortsFeed> =
             }
         }
         val picked = entries.distinctBy { it.videoId }.take(limit)
+        // One overlay and one watch page per reel, in flight together: the overlay names the
+        // channel and the counts, the watch page is where the views and the age live.
         val shorts =
-            picked.map { entry ->
-                val overlay = YouTube.reelOverlay(entry.videoId).getOrNull()
-                Short(
-                    videoId = entry.videoId,
-                    title = overlay?.title.orEmpty(),
-                    channelName = overlay?.channelName,
-                    channelId = overlay?.channelId,
-                    // The sequence's own still is the reel's frame, at the reel's aspect ratio.
-                    stillUrl = entry.posterUrl ?: reelPosterUrl(entry.videoId),
-                    likeCountText = overlay?.likeCountText,
-                    commentCountText = overlay?.commentCountText,
-                    params = entry.params,
-                )
+            coroutineScope {
+                picked
+                    .map { entry ->
+                        async {
+                            val overlay = YouTube.reelOverlay(entry.videoId).getOrNull()
+                            val metadata = YouTube.watchMetadataLite(entry.videoId).getOrNull()
+                            Short(
+                                videoId = entry.videoId,
+                                title = overlay?.title.orEmpty(),
+                                // The watch page names the channel; the overlay's text is the
+                                // handle, so it is only the fallback when the page has no owner.
+                                channelName = metadata?.channelName()?.takeIf { it.isNotBlank() } ?: overlay?.channelName,
+                                channelId = overlay?.channelId ?: metadata?.channelId(),
+                                channelAvatarUrl =
+                                    metadata?.channelAvatarUrl()?.takeIf { it.isNotBlank() }
+                                        ?: overlay?.channelAvatarUrl,
+                                // The sequence's own still is the reel's frame, at the reel's aspect ratio.
+                                stillUrl = entry.posterUrl ?: reelPosterUrl(entry.videoId),
+                                likeCountText = overlay?.likeCountText,
+                                commentCountText = overlay?.commentCountText,
+                                viewCountText = metadata?.viewCountText()?.takeIf { it.isNotBlank() },
+                                publishedTimeText = metadata?.relativeUploadDate(),
+                                soundTitle = overlay?.soundTitle?.takeIf { it.isNotBlank() },
+                                params = entry.params,
+                            )
+                        }
+                    }.awaitAll()
             }
         ShortsFeed(shorts = shorts, continuation = continuation)
     }

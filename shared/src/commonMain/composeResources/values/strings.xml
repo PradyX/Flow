@@ -139,6 +139,10 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_apply">Apply</string>
     <string name="action_like">Like</string>
+    <string name="action_comments">Comments</string>
+    <string name="action_play">Play</string>
+    <string name="action_open_channel">Open channel</string>
+    <string name="cd_more_options">More Options</string>
     <string name="action_dislike">Dislike</string>
     <string name="action_share">Share</string>
     <string name="action_copy_link">Copy link</string>
