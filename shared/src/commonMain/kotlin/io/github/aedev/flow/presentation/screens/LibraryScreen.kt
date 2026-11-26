@@ -69,6 +69,7 @@ import io.github.aedev.flow.resources.library_local_remove
 import io.github.aedev.flow.resources.library_title
 import io.github.aedev.flow.resources.playlist_add_to
 import io.github.aedev.flow.resources.playlists_title
+import io.github.aedev.flow.resources.saved_shorts_title
 import io.github.aedev.flow.ui.theme.Dimensions
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -102,6 +103,8 @@ internal fun LibraryScreen(
     /** The playlists this device made, so a saved row can be put on one. */
     playlists: UserPlaylists = UserPlaylists(),
     onOpenPlaylists: () -> Unit = {},
+    /** Opens the shorts saved from the reel, the library's own collection for them. */
+    onOpenSavedShorts: () -> Unit = {},
     /** Puts the video on a playlist it is not on, or takes it off one it is. */
     onToggleInPlaylist: (playlistId: String, item: LibraryItem) -> Unit = { _, _ -> },
     /** Makes a playlist with this video on it. */
@@ -153,6 +156,12 @@ internal fun LibraryScreen(
                             contentDescription = stringResource(Res.string.library_import),
                         )
                     }
+                }
+                IconButton(onClick = onOpenSavedShorts) {
+                    Icon(
+                        imageVector = FlowIcons.Bookmark,
+                        contentDescription = stringResource(Res.string.saved_shorts_title),
+                    )
                 }
                 IconButton(onClick = onOpenPlaylists) {
                     Icon(

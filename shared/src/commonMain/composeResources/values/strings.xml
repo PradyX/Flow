@@ -404,6 +404,8 @@
     <string name="categories_empty">Nothing to show in this category right now.</string>
     <string name="categories_failed">This category did not load.</string>
     <string name="categories_load_more">Load more</string>
+    <string name="saved_shorts_title">Saved Shorts</string>
+    <string name="saved_shorts_empty">Shorts you save from the reel show up here.</string>
     <string name="moods_title">Moods &amp; genres</string>
     <string name="moods_failed">Moods and genres did not load.</string>
     <string name="moods_empty">No moods or genres to show.</string>

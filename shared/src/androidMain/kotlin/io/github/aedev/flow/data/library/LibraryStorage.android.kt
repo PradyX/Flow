@@ -17,6 +17,7 @@ actual fun openLibraryDatabase(path: String): FlowLibraryDatabase {
     return Room
         .databaseBuilder(context, FlowLibraryDatabase::class.java, path)
         .setDriver(BundledSQLiteDriver())
+        .addMigrations(FlowLibraryDatabase.MIGRATION_1_2)
         .build()
 }
 

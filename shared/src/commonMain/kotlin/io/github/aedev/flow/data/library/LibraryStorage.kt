@@ -7,6 +7,9 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.SQLiteConnection
+import androidx.sqlite.execSQL
 
 /**
  * One saved video in the on-device library: the metadata the list needs to draw its row without a
@@ -20,6 +23,7 @@ data class LibraryItemEntity(
     val thumbnailUrl: String?,
     val isDownloaded: Boolean,
     val savedAtMillis: Long,
+    val isShort: Boolean = false,
 )
 
 @Dao
@@ -37,9 +41,19 @@ interface LibraryItemDao {
     suspend fun delete(videoId: String)
 }
 
-@Database(entities = [LibraryItemEntity::class], version = 1, exportSchema = false)
+@Database(entities = [LibraryItemEntity::class], version = 2, exportSchema = false)
 abstract class FlowLibraryDatabase : RoomDatabase() {
     abstract fun libraryItems(): LibraryItemDao
+
+    companion object {
+        /** The saved-shorts flag arrived after the first release; existing rows are all videos. */
+        val MIGRATION_1_2: Migration =
+            object : Migration(1, 2) {
+                override fun migrate(connection: SQLiteConnection) {
+                    connection.execSQL("ALTER TABLE library_item ADD COLUMN isShort INTEGER NOT NULL DEFAULT 0")
+                }
+            }
+    }
 }
 
 /** A saved video as the screens read it. */
@@ -49,6 +63,7 @@ data class LibraryItem(
     val channelName: String?,
     val thumbnailUrl: String?,
     val isDownloaded: Boolean,
+    val isShort: Boolean = false,
 )
 
 private fun LibraryItemEntity.toItem(): LibraryItem =
@@ -58,6 +73,7 @@ private fun LibraryItemEntity.toItem(): LibraryItem =
         channelName = channelName,
         thumbnailUrl = thumbnailUrl,
         isDownloaded = isDownloaded,
+        isShort = isShort,
     )
 
 /**
@@ -72,6 +88,9 @@ class LibraryStore(
 
     suspend fun items(): List<LibraryItem> = dao.all().map(LibraryItemEntity::toItem)
 
+    /** The saved rows that came from the reel, the collection the Saved Shorts page draws. */
+    suspend fun savedShorts(): List<LibraryItem> = items().filter { it.isShort }
+
     suspend fun find(videoId: String): LibraryItem? = dao.find(videoId)?.toItem()
 
     /** Saves the video, or removes it when it is already saved; returns whether it is saved now. */
@@ -81,6 +100,7 @@ class LibraryStore(
         channelName: String?,
         thumbnailUrl: String?,
         nowMillis: Long,
+        isShort: Boolean = false,
     ): Boolean {
         val existing = dao.find(videoId)
         if (existing != null) {
@@ -95,6 +115,7 @@ class LibraryStore(
                 thumbnailUrl = thumbnailUrl,
                 isDownloaded = false,
                 savedAtMillis = nowMillis,
+                isShort = isShort,
             ),
         )
         return true

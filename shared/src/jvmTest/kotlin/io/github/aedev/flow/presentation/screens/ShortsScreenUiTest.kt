@@ -3,8 +3,10 @@ package io.github.aedev.flow.presentation.screens
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.v2.runComposeUiTest
@@ -17,6 +19,7 @@ import io.ktor.client.engine.mock.toByteArray
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import kotlinx.coroutines.runBlocking
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -83,9 +86,10 @@ class ShortsScreenUiTest {
             if (previous == null) previous = YouTube.innerTube
             YouTube.innerTube = client
 
+            val store = inMemoryLibraryStore()
             setContent {
                 MaterialTheme {
-                    ShortsScreen(onBack = {})
+                    ShortsScreen(libraryStore = store, onBack = {})
                 }
             }
 
@@ -98,6 +102,14 @@ class ShortsScreenUiTest {
                 "the captured reel title is not on screen",
             )
             onNodeWithTag(shortStillTag(firstId)).assertExists()
+
+            // The reel's save control writes the short into the library's own collection.
+            onNodeWithContentDescription("Save").performClick()
+            waitUntil(timeoutMillis = 5_000) { runBlocking { store.savedShorts().isNotEmpty() } }
+            assertTrue(
+                runBlocking { store.savedShorts() }.any { it.videoId == firstId },
+                "the saved reel is not in the saved-shorts collection",
+            )
 
             onNodeWithTag(SHORTS_PAGER_TEST_TAG).performTouchInput { swipeUp() }
 

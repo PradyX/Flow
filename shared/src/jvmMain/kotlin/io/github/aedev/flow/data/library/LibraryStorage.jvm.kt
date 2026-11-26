@@ -10,6 +10,7 @@ actual fun openLibraryDatabase(path: String): FlowLibraryDatabase =
         .databaseBuilder<FlowLibraryDatabase>(name = path)
         .setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.Default)
+        .addMigrations(FlowLibraryDatabase.MIGRATION_1_2)
         .build()
 
 actual fun openDefaultLibraryDatabase(): FlowLibraryDatabase {

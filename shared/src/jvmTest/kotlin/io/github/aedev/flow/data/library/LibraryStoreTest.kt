@@ -50,4 +50,29 @@ class LibraryStoreTest {
             assertTrue(fourth.items().isEmpty())
             fourth.close()
         }
+
+    @Test
+    fun aSavedShortStaysInTheSavedShortsCollectionAndOutOfTheVideoList() =
+        runTest {
+            val path = tempLibraryDatabasePath()
+            val shortId = "QUIJ8UtYBzA"
+            val videoId = "QIbT7qqnEDo"
+
+            val first = fileLibraryStore(path)
+            first.toggleSaved(
+                videoId = shortId,
+                title = "Uncle's kindness towards his friend",
+                channelName = "@shorts_kingdom01",
+                thumbnailUrl = null,
+                nowMillis = 1_700_000_000_000,
+                isShort = true,
+            )
+            first.toggleSaved(videoId, title, channel, thumbnail, nowMillis = 1_700_000_000_001)
+            first.close()
+
+            val second = fileLibraryStore(path)
+            assertEquals(listOf(shortId), second.savedShorts().map { it.videoId })
+            assertEquals(2, second.items().size)
+            second.close()
+        }
 }

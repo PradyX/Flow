@@ -111,6 +111,7 @@ import io.github.aedev.flow.presentation.screens.PlayerScreen
 import io.github.aedev.flow.presentation.screens.PlaylistScreen
 import io.github.aedev.flow.presentation.screens.PlaylistsScreen
 import io.github.aedev.flow.presentation.screens.PostScreen
+import io.github.aedev.flow.presentation.screens.SavedShortsScreen
 import io.github.aedev.flow.presentation.screens.SearchScreen
 import io.github.aedev.flow.presentation.screens.SettingsScreen
 import io.github.aedev.flow.presentation.screens.ShortsScreen
@@ -750,6 +751,7 @@ fun App(
                                         onRemoveLocal = { item -> saveLocalMedia(localMedia.without(item.uri)) },
                                         playlists = playlists,
                                         onOpenPlaylists = { router.push(AppDestination.Playlists) },
+                                        onOpenSavedShorts = { router.push(AppDestination.SavedShorts) },
                                         onToggleInPlaylist = { playlistId, item ->
                                             val now = nowMillis()
                                             savePlaylists(
@@ -801,7 +803,20 @@ fun App(
                                 }
 
                                 AppDestination.Shorts -> {
-                                    ShortsScreen(onBack = { router.pop() })
+                                    ShortsScreen(
+                                        libraryStore = libraryStore,
+                                        onBack = { router.pop() },
+                                    )
+                                }
+
+                                AppDestination.SavedShorts -> {
+                                    SavedShortsScreen(
+                                        store = libraryStore,
+                                        onBack = { router.pop() },
+                                        onOpenVideo = { videoId, title, thumbnailUrl ->
+                                            playAt(videoId, title, thumbnailUrl, 0)
+                                        },
+                                    )
                                 }
 
                                 AppDestination.History -> {
@@ -1200,6 +1215,7 @@ private fun TopBar(
         AppDestination.Explore,
         AppDestination.Moods,
         AppDestination.History,
+        AppDestination.SavedShorts,
         AppDestination.Notes,
         AppDestination.Playlists,
         AppDestination.Settings,

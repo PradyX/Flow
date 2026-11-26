@@ -56,6 +56,9 @@ sealed interface AppDestination {
     /** The videos this device watched, opened from the profile sheet and the library's bar. */
     data object History : AppDestination
 
+    /** The shorts saved from the reel, opened from the library's bar. */
+    data object SavedShorts : AppDestination
+
     /** The notes written on videos, opened from the profile sheet and the player's action row. */
     data object Notes : AppDestination
 
