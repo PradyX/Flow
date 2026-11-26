@@ -1,0 +1,6 @@
+## Improved
+
+- The bottom bar now uses Material's short navigation bar, so screens above it get the same height in split screen as full screen.
+- Shorts' action buttons sit on the same scrim discs as the app's, and the rail, labels, channel row and metadata line up with the reference in both window layouts.
+- The Subscribe button on a Short now uses Material's compact size, so it matches the reference's height.
+- The comments sheet on a Short is a flat full width panel with a drag handle and a titled header, sits above the bottom bar, and opens at the same height the reference gives it.

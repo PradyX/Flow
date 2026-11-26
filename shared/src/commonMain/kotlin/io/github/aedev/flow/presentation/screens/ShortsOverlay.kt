@@ -13,8 +13,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import io.github.aedev.flow.presentation.feed.Short
 import io.github.aedev.flow.presentation.ui.FlowIcons
+import io.github.aedev.flow.presentation.ui.FlowSubscribeButton
 import io.github.aedev.flow.resources.Res
 import io.github.aedev.flow.resources.action_comments
 import io.github.aedev.flow.resources.action_like
@@ -41,6 +43,7 @@ import io.github.aedev.flow.resources.playlist_more_options
 import io.github.aedev.flow.resources.subscribe
 import io.github.aedev.flow.resources.subscribed
 import io.github.aedev.flow.ui.theme.PlayerScrim
+import io.github.aedev.flow.ui.theme.PlayerScrimAffordance
 import io.github.aedev.flow.ui.theme.PlayerScrimContent
 import io.github.aedev.flow.ui.theme.PlayerScrimPanel
 import io.github.aedev.flow.utils.formatViewCount
@@ -52,10 +55,9 @@ internal val ShortsChromeStartPadding = 16.dp
 internal val ShortsChromeEndPadding = 8.dp
 internal val ShortsMetadataEndPadding = 16.dp
 
-// The reference seats the reel's chrome 34dp above its short navigation bar. The shell's bar is
-// 16.5dp taller at this density (it is the one chrome piece already matched to the app's own bar),
-// so the offset absorbs that difference and the chrome lands on the reference's rows.
-internal val ShortsControlsBottomOffset = 17.5.dp
+// The reference seats the reel's chrome 34dp above its bar; the shell draws the same Material bar,
+// so the same offset lands the chrome on the reference's rows in a pane as well as full screen.
+internal val ShortsControlsBottomOffset = 34.dp
 
 private val RailSpacing = 16.dp
 private val RailButtonSize = 44.dp
@@ -72,8 +74,6 @@ private val SoundBarWidth = 2.dp
 private val SoundBarGap = 2.dp
 private val SoundBarMinHeight = 4.dp
 private val SoundBarMaxHeight = 12.dp
-private val SubscribeHorizontalPadding = 12.dp
-private val SubscribeVerticalPadding = 4.dp
 
 private val OverlayTextShadow = Shadow(color = PlayerScrim, blurRadius = 4f)
 
@@ -144,9 +144,19 @@ private fun ShortsRailAction(
     contentColor: Color = PlayerScrimContent,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        IconButton(
+        // The reference's affordance: a scrim disc under the mark, kept for the inert like too, so
+        // the rail reads as one column of controls.
+        FilledIconButton(
             onClick = { onClick?.invoke() },
             enabled = onClick != null,
+            shapes = IconButtonDefaults.shapes(),
+            colors =
+                IconButtonDefaults.filledIconButtonColors(
+                    containerColor = PlayerScrimAffordance,
+                    contentColor = PlayerScrimContent,
+                    disabledContainerColor = PlayerScrimAffordance,
+                    disabledContentColor = PlayerScrimContent,
+                ),
             modifier = Modifier.size(RailButtonSize),
         ) {
             Icon(
@@ -240,7 +250,12 @@ internal fun ShortsMetadataOverlay(
                 )
                 Spacer(modifier = Modifier.width(ChannelRowSpacing))
             }
-            ShortsSubscribePill(isSubscribed = isSubscribed, onClick = onSubscribeToggle)
+            FlowSubscribeButton(
+                subscribed = isSubscribed,
+                onSubscribe = onSubscribeToggle,
+                onUnsubscribe = onSubscribeToggle,
+                compact = true,
+            )
         }
 
         if (short.title.isNotBlank()) {
@@ -306,31 +321,6 @@ private fun compactViewCount(text: String?): String {
         }
     // YouTube sometimes serves "25Kviews"; the app writes the count and its noun apart.
     return compact.replace(Regex("(\\d[KMB])(?=[A-Za-z])"), "$1 ")
-}
-
-/** The reference's compact pill: a primary fill while unsubscribed, a tonal one after. */
-@Composable
-private fun ShortsSubscribePill(
-    isSubscribed: Boolean,
-    onClick: () -> Unit,
-) {
-    val container = if (isSubscribed) PlayerScrimPanel else MaterialTheme.colorScheme.primary
-    val content = if (isSubscribed) PlayerScrimContent else MaterialTheme.colorScheme.onPrimary
-    Box(
-        modifier =
-            Modifier
-                .clip(MaterialTheme.shapes.small)
-                .background(container)
-                .clickable(onClick = onClick)
-                .padding(horizontal = SubscribeHorizontalPadding, vertical = SubscribeVerticalPadding),
-    ) {
-        Text(
-            text = stringResource(if (isSubscribed) Res.string.subscribed else Res.string.subscribe),
-            style = MaterialTheme.typography.labelLarge,
-            color = content,
-            maxLines = 1,
-        )
-    }
 }
 
 /** The sound's mark: the bars the reference shows beside the track's name. */

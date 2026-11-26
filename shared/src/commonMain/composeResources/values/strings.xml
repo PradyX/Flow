@@ -143,6 +143,7 @@
     <string name="action_play">Play</string>
     <string name="action_open_channel">Open channel</string>
     <string name="cd_more_options">More Options</string>
+    <string name="cd_close">Close</string>
     <string name="action_dislike">Dislike</string>
     <string name="action_share">Share</string>
     <string name="action_copy_link">Copy link</string>

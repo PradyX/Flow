@@ -3,25 +3,33 @@ package io.github.aedev.flow.presentation.screens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,10 +38,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -60,13 +71,13 @@ import io.github.aedev.flow.resources.action_play
 import io.github.aedev.flow.resources.action_retry
 import io.github.aedev.flow.resources.action_save
 import io.github.aedev.flow.resources.action_saved
-import io.github.aedev.flow.resources.comments_title
 import io.github.aedev.flow.resources.feed_failed
 import io.github.aedev.flow.resources.link_copied
 import io.github.aedev.flow.resources.shorts_empty
 import io.github.aedev.flow.resources.shorts_title
 import io.github.aedev.flow.ui.theme.Dimensions
 import io.github.aedev.flow.ui.theme.PlayerScrimContent
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Clock
@@ -94,7 +105,7 @@ private data class ShortComments(
  * the port can honour (comments, save, share, more) and the like count is drawn without a toggle,
  * the same call the player's like pair makes.
  */
-@OptIn(ExperimentalTime::class)
+@OptIn(ExperimentalTime::class, ExperimentalMaterial3Api::class)
 @Composable
 internal fun ShortsScreen(
     libraryStore: LibraryStore,
@@ -157,12 +168,26 @@ internal fun ShortsScreen(
         }
     }
 
+    val commentsSheetState =
+        rememberBottomSheetState(
+            initialValue = SheetValue.Hidden,
+            enabledValues =
+                setOf(SheetValue.Hidden, SheetValue.PartiallyExpanded, SheetValue.Expanded),
+        )
+    val commentsScaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = commentsSheetState)
+    LaunchedEffect(commentsSheetState) {
+        snapshotFlow { commentsSheetState.currentValue }.collect { value ->
+            if (value == SheetValue.Hidden) commentsFor = null
+        }
+    }
+
     val openComments: (Short) -> Unit = { short ->
         commentsFor = short.videoId
         comments = null
         commentsLoading = true
         expandedReplies = emptySet()
         repliesByComment = emptyMap()
+        scope.launch { commentsSheetState.partialExpand() }
         scope.launch {
             comments =
                 loadVideoDetail(short.videoId).getOrNull()?.let { detail ->
@@ -199,112 +224,116 @@ internal fun ShortsScreen(
             )
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        when (val current = state) {
-            LoadState.Loading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            }
-
-            is LoadState.Failed -> {
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(Dimensions.SectionSpacing),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(
-                        text = stringResource(Res.string.feed_failed),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    TextButton(onClick = { attempt++ }) {
-                        Text(stringResource(Res.string.action_retry))
-                    }
-                }
-            }
-
-            is LoadState.Ready -> {
-                if (current.value.shorts.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(Res.string.shorts_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                } else {
-                    ShortsPager(
-                        shorts = current.value.shorts,
-                        savedIds = savedIds,
-                        subscriptions = subscriptions,
-                        onToggleSaved = onToggleSaved,
-                        onToggleSubscription = onToggleSubscription,
-                        onOpenComments = openComments,
-                        onShare = { short ->
-                            share(
-                                short.title.ifBlank { short.channelName.orEmpty() },
-                                videoWatchUrl(short.videoId),
-                            )
-                        },
-                        onMore = { short -> moreFor = short },
-                        onOpenVideo = onOpenVideo,
-                        onOpenChannel = onOpenChannel,
-                    )
-                }
-            }
-        }
-
-        // The tab's own title over the reel, the way the reference labels the Shorts tab.
-        Text(
-            text = stringResource(Res.string.shorts_title),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = PlayerScrimContent,
-            modifier =
-                Modifier
-                    .align(Alignment.TopStart)
-                    .statusBarsPadding()
-                    .padding(horizontal = 16.dp),
-        )
-
-        SnackbarHost(
-            hostState = snackbar,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp),
-        )
-    }
-
-    val commentedVideo = commentsFor
-    if (commentedVideo != null) {
-        BottomSheet(onDismiss = { commentsFor = null }) {
-            LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                item("comments-title") {
-                    Text(
-                        text = stringResource(Res.string.comments_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-                    )
-                }
-                val current = comments
-                if (current != null) {
-                    commentsSection(
-                        comments = current.comments,
-                        countText = current.countText,
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // The reference measures a sheet against the reel's own area: the screen above the bar,
+        // less the status inset, so the sheet leaves the reel's first rows visible behind it.
+        val statusBarInset = with(LocalDensity.current) { WindowInsets.statusBars.getTop(this).toDp() }
+        val commentsSheetHeight = (maxHeight - statusBarInset) * COMMENTS_SHEET_HEIGHT_FRACTION
+        // The sheet lives inside the reel's layout rather than over it, so it ends at the bar the
+        // way the reference's sheet does and leaves the reel and its bar in place.
+        BottomSheetScaffold(
+            scaffoldState = commentsScaffoldState,
+            // The reel keeps its first rows above the sheet: the sheet rests at the 62% the
+            // reference gives it, at the reel's own bottom, and can still be pulled fuller.
+            sheetPeekHeight = commentsSheetHeight,
+            sheetShape = RectangleShape,
+            sheetContainerColor = MaterialTheme.colorScheme.surface,
+            sheetTonalElevation = 0.dp,
+            containerColor = MaterialTheme.colorScheme.background,
+            // The handle is drawn inside the sheet body, so the body's height is the whole sheet and
+            // its 62% cap covers the handle the way the reference's sheet does.
+            sheetDragHandle = null,
+            sheetContent = {
+                if (commentsFor != null) {
+                    ShortsCommentsSheet(
+                        comments = comments?.comments,
+                        countText = comments?.countText,
+                        loading = commentsLoading,
                         replies = repliesByComment,
                         expanded = expandedReplies,
-                        loading = loadingReplies,
+                        loadingReplies = loadingReplies,
                         onToggleReplies = onToggleReplies,
+                        onDismiss = { scope.launch { commentsSheetState.hide() } },
+                        modifier = Modifier.height(commentsSheetHeight),
                     )
-                } else if (commentsLoading) {
-                    item("comments-loading") {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(24.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
+                }
+            },
+        ) { _ ->
+            // The reel keeps its full height under the sheet, as the reference's does, so the sheet
+            // rests over it rather than pushing it up.
+            Box(modifier = Modifier.fillMaxSize()) {
+                when (val current = state) {
+                    LoadState.Loading -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
                         }
                     }
+
+                    is LoadState.Failed -> {
+                        Column(
+                            modifier = Modifier.fillMaxSize().padding(Dimensions.SectionSpacing),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            Text(
+                                text = stringResource(Res.string.feed_failed),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            TextButton(onClick = { attempt++ }) {
+                                Text(stringResource(Res.string.action_retry))
+                            }
+                        }
+                    }
+
+                    is LoadState.Ready -> {
+                        if (current.value.shorts.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = stringResource(Res.string.shorts_empty),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        } else {
+                            ShortsPager(
+                                shorts = current.value.shorts,
+                                savedIds = savedIds,
+                                subscriptions = subscriptions,
+                                onToggleSaved = onToggleSaved,
+                                onToggleSubscription = onToggleSubscription,
+                                onOpenComments = openComments,
+                                onShare = { short ->
+                                    share(
+                                        short.title.ifBlank { short.channelName.orEmpty() },
+                                        videoWatchUrl(short.videoId),
+                                    )
+                                },
+                                onMore = { short -> moreFor = short },
+                                onOpenVideo = onOpenVideo,
+                                onOpenChannel = onOpenChannel,
+                            )
+                        }
+                    }
                 }
+
+                // The tab's own title over the reel, the way the reference labels the Shorts tab.
+                Text(
+                    text = stringResource(Res.string.shorts_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = PlayerScrimContent,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .statusBarsPadding()
+                            .padding(horizontal = 16.dp),
+                )
+
+                SnackbarHost(
+                    hostState = snackbar,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp),
+                )
             }
         }
     }

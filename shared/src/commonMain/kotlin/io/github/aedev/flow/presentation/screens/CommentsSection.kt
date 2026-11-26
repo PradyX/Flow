@@ -66,9 +66,10 @@ internal fun LazyListScope.commentsSection(
     expanded: Set<String>,
     loading: Set<String>,
     onToggleReplies: (FeedComment) -> Unit,
+    showHeader: Boolean = true,
 ) {
     if (comments.isEmpty()) return
-    item("comments-header") { CommentsHeader(countText) }
+    if (showHeader) item("comments-header") { CommentsHeader(countText) }
     items(comments, key = { "comment-${it.id}" }) { comment ->
         val isExpanded = comment.id in expanded
         Column {

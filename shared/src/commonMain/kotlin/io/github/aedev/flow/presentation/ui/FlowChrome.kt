@@ -24,6 +24,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.ShortNavigationBar
+import androidx.compose.material3.ShortNavigationBarArrangement
 import androidx.compose.material3.ShortNavigationBarItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -152,42 +154,35 @@ internal fun FlowNavigationBar(
     val barTabs = FlowTab.entries.take(MAX_BAR_TABS)
     val overflowTabs = FlowTab.entries.drop(MAX_BAR_TABS)
     var overflowOpen by remember { mutableStateOf(false) }
-    // ShortNavigationBar's own layout clips a sixth child, so the bar is a row of equal slots: the
-    // five destinations Material allows, plus More when an extra tab needs a home.
-    Surface(color = MaterialTheme.colorScheme.surface) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .height(80.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            barTabs.forEach { tab ->
-                val isSelected = tab == selected
-                Box(modifier = Modifier.fillMaxHeight()) {
-                    ShortNavigationBarItem(
-                        selected = isSelected,
-                        onClick = { onSelect(tab) },
-                        icon = {
-                            Icon(
-                                imageVector = if (isSelected) tab.selectedIcon else tab.icon,
-                                contentDescription = null,
-                            )
-                        },
-                        label = { Text(text = stringResource(tab.label)) },
+    // Material's own bar: its 64dp container plus the navigation inset is the height the app's bar
+    // takes, in a pane as well as full screen, so content above it ends where the app's does.
+    ShortNavigationBar(
+        containerColor = MaterialTheme.colorScheme.surface,
+        arrangement = ShortNavigationBarArrangement.EqualWeight,
+    ) {
+        barTabs.forEach { tab ->
+            val isSelected = tab == selected
+            ShortNavigationBarItem(
+                selected = isSelected,
+                onClick = { onSelect(tab) },
+                icon = {
+                    Icon(
+                        imageVector = if (isSelected) tab.selectedIcon else tab.icon,
+                        contentDescription = null,
                     )
-                }
-            }
-            if (overflowTabs.isNotEmpty()) {
-                Box(modifier = Modifier.fillMaxHeight()) {
-                    ShortNavigationBarItem(
-                        selected = selected in overflowTabs,
-                        onClick = { overflowOpen = true },
-                        icon = { Icon(imageVector = FlowIcons.MoreHoriz, contentDescription = null) },
-                        label = { Text(text = stringResource(Res.string.nav_more)) },
-                    )
-                }
+                },
+                label = { Text(text = stringResource(tab.label)) },
+            )
+        }
+        if (overflowTabs.isNotEmpty()) {
+            // One Box per bar slot: the bar measures every direct child as an item.
+            Box(propagateMinConstraints = true) {
+                ShortNavigationBarItem(
+                    selected = selected in overflowTabs,
+                    onClick = { overflowOpen = true },
+                    icon = { Icon(imageVector = FlowIcons.MoreHoriz, contentDescription = null) },
+                    label = { Text(text = stringResource(Res.string.nav_more)) },
+                )
             }
         }
     }
