@@ -3,8 +3,11 @@ package io.github.aedev.flow.presentation.ui
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathBuilder
+import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.graphics.vector.group
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
@@ -17,6 +20,138 @@ import androidx.compose.ui.unit.dp
  * tints it with the surrounding content colour.
  */
 internal object FlowIcons {
+    // The navigation bar's icons are the reference app's own set: Material's filled and outlined
+    // drawings for every tab, plus the app's custom Shorts mark, so a tab reads the same in both.
+
+    val HomeFilled: ImageVector by lazy {
+        pathIcon("HomeFilled", "M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z")
+    }
+
+    val HomeOutlined: ImageVector by lazy {
+        pathIcon("HomeOutlined", "M12 5.69l5 4.5V18h-2v-6H9v6H7v-7.81l5-4.5M12 3L2 12h3v8h6v-6h2v6h6v-8h3L12 3z")
+    }
+
+    val MusicNoteFilled: ImageVector by lazy {
+        pathIcon(
+            "MusicNoteFilled",
+            "M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z",
+        )
+    }
+
+    val MusicNoteOutlined: ImageVector by lazy {
+        pathIcon(
+            "MusicNoteOutlined",
+            "M12 3l.01 10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4.01 4S14 19.21 14 17V7h4V3h-6zm-1.99 16c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z",
+        )
+    }
+
+    val SubscriptionsFilled: ImageVector by lazy {
+        pathIcon(
+            "SubscriptionsFilled",
+            "M20 8H4V6h16v2zm-2-6H6v2h12V2zm4 10v8c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2v-8c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2zm-6 4l-6-3.27v6.53L16 16z",
+        )
+    }
+
+    val SubscriptionsOutlined: ImageVector by lazy {
+        pathIcon(
+            "SubscriptionsOutlined",
+            "M4 6h16v2H4zm2-4h12v2H6zm14 8H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2zm0 10H4v-8h16v8zm-10-7.27v6.53L16 16z",
+        )
+    }
+
+    val VideoLibraryFilled: ImageVector by lazy {
+        pathIcon(
+            "VideoLibraryFilled",
+            "M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z",
+        )
+    }
+
+    val VideoLibraryOutlined: ImageVector by lazy {
+        pathIcon(
+            "VideoLibraryOutlined",
+            "M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zM12 5.5v9l6-4.5z",
+        )
+    }
+
+    val ExploreFilled: ImageVector by lazy {
+        pathIcon(
+            "ExploreFilled",
+            "M12 10.9c-.61 0-1.1.49-1.1 1.1s.49 1.1 1.1 1.1c.61 0 1.1-.49 1.1-1.1s-.49-1.1-1.1-1.1zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm2.19 12.19L6 18l3.81-8.19L18 6l-3.81 8.19z",
+        )
+    }
+
+    val ExploreOutlined: ImageVector by lazy {
+        pathIcon(
+            "ExploreOutlined",
+            "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z",
+        )
+    }
+
+    val SearchFilled: ImageVector by lazy {
+        pathIcon(
+            "SearchFilled",
+            "M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
+        )
+    }
+
+    val SearchOutlined: ImageVector get() = SearchFilled
+
+    /** The reference app's Shorts mark: a stroked double-arrow ribbon, filled when selected. */
+    val ShortsOutlined: ImageVector by lazy {
+        ImageVector
+            .Builder(
+                name = "ShortsOutlined",
+                defaultWidth = 24.dp,
+                defaultHeight = 24.dp,
+                viewportWidth = 144f,
+                viewportHeight = 144f,
+            ).apply {
+                group(translationX = 8f, translationY = 8f) {
+                    addPath(
+                        pathData =
+                            addPathNodes(
+                                "M63.49 2.71c11.59-6.04 25.94-1.64 32.04 9.83 6.1 11.47 1.65 25.66-9.94 31.7l-9.53 5.01c8.21.3 16.04 4.81 20.14 12.52 6.1 11.47 1.66 25.66-9.94 31.7l-50.82 26.7c-11.59 6.04-25.94 1.64-32.04-9.83-6.1-11.47-1.65-25.66 9.94-31.7l9.53-5.01c-8.21-.3-16.04-4.81-20.14-12.52-6.1-11.47-1.65-25.66 9.94-31.7l50.82-26.7zM36.06 42.53l30.76 18.99-30.76 18.9V42.53z",
+                            ),
+                        fill = null,
+                        stroke = SolidColor(Color.Black),
+                        strokeLineWidth = 8f,
+                        strokeLineCap = StrokeCap.Round,
+                        strokeLineJoin = StrokeJoin.Round,
+                        pathFillType = PathFillType.EvenOdd,
+                    )
+                }
+            }.build()
+    }
+
+    val ShortsFilled: ImageVector by lazy {
+        ImageVector
+            .Builder(
+                name = "ShortsFilled",
+                defaultWidth = 24.dp,
+                defaultHeight = 24.dp,
+                viewportWidth = 144f,
+                viewportHeight = 144f,
+            ).apply {
+                group(
+                    translationX = 8f,
+                    translationY = 8f,
+                    pivotX = 64f,
+                    pivotY = 64f,
+                    scaleX = 1.03f,
+                    scaleY = 1.03f,
+                ) {
+                    addPath(
+                        pathData =
+                            addPathNodes(
+                                "M63.49 2.71c11.59-6.04 25.94-1.64 32.04 9.83 6.1 11.47 1.65 25.66-9.94 31.7l-9.53 5.01c8.21.3 16.04 4.81 20.14 12.52 6.1 11.47 1.66 25.66-9.94 31.7l-50.82 26.7c-11.59 6.04-25.94 1.64-32.04-9.83-6.1-11.47-1.65-25.66 9.94-31.7l9.53-5.01c-8.21-.3-16.04-4.81-20.14-12.52-6.1-11.47-1.65-25.66 9.94-31.7l50.82-26.7zM36.06 42.53l30.76 18.99-30.76 18.9V42.53z",
+                            ),
+                        fill = SolidColor(Color.Black),
+                        pathFillType = PathFillType.EvenOdd,
+                    )
+                }
+            }.build()
+    }
+
     val Home: ImageVector by lazy {
         icon("Home") {
             moveTo(12f, 3f)
@@ -633,7 +768,13 @@ internal object FlowIcons {
             }.build()
     }
 
-    /** The three-dot card menu: one column of dots, as the app's overflow button. */
+    val MoreHoriz: ImageVector by lazy {
+        pathIcon(
+            "MoreHoriz",
+            "M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z",
+        )
+    }
+
     val MoreVert: ImageVector by lazy {
         icon("MoreVert") {
             circle(cx = 12f, cy = 5f, r = 1.9f)
@@ -1008,6 +1149,26 @@ private fun icon(
                 fill = SolidColor(Color.Black),
                 pathFillType = PathFillType.EvenOdd,
                 pathBuilder = pathBuilder,
+            )
+        }.build()
+
+/** One filled glyph from the SVG path data of the reference app's icon, verbatim. */
+private fun pathIcon(
+    name: String,
+    pathData: String,
+): ImageVector =
+    ImageVector
+        .Builder(
+            name = name,
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).apply {
+            addPath(
+                pathData = addPathNodes(pathData),
+                fill = SolidColor(Color.Black),
+                pathFillType = PathFillType.EvenOdd,
             )
         }.build()
 

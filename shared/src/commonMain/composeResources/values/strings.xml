@@ -63,6 +63,10 @@
     <string name="theme_name_caffeine">Caffeine</string>
     <string name="theme_desc_caffeine">Coffee tones balanced with cream and espresso.</string>
     <string name="nav_home">Home</string>
+    <string name="nav_shorts">Shorts</string>
+    <string name="nav_music">Music</string>
+    <string name="nav_subs">Subs</string>
+    <string name="nav_more">More</string>
     <string name="nav_search">Search</string>
     <string name="action_back">Back</string>
     <string name="action_search">Search</string>

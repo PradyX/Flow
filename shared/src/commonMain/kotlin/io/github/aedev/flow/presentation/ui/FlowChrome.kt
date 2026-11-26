@@ -3,13 +3,19 @@ package io.github.aedev.flow.presentation.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -18,7 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.ShortNavigationBar
 import androidx.compose.material3.ShortNavigationBarItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -26,7 +31,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,17 +46,18 @@ import androidx.compose.ui.unit.dp
 import io.github.aedev.flow.resources.Res
 import io.github.aedev.flow.resources.action_current_profile
 import io.github.aedev.flow.resources.history_title
-import io.github.aedev.flow.resources.music_title
 import io.github.aedev.flow.resources.nav_explore
 import io.github.aedev.flow.resources.nav_home
 import io.github.aedev.flow.resources.nav_library
-import io.github.aedev.flow.resources.nav_subscriptions
+import io.github.aedev.flow.resources.nav_more
+import io.github.aedev.flow.resources.nav_music
+import io.github.aedev.flow.resources.nav_shorts
+import io.github.aedev.flow.resources.nav_subs
 import io.github.aedev.flow.resources.notes_title
 import io.github.aedev.flow.resources.profile_local_desc
 import io.github.aedev.flow.resources.profile_name
 import io.github.aedev.flow.resources.profiles_title
 import io.github.aedev.flow.resources.settings_title
-import io.github.aedev.flow.resources.shorts_title
 import io.github.aedev.flow.ui.theme.Dimensions
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -61,14 +70,18 @@ import org.jetbrains.compose.resources.stringResource
 enum class FlowTab(
     val label: StringResource,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
 ) {
-    HOME(Res.string.nav_home, FlowIcons.Home),
-    SHORTS(Res.string.shorts_title, FlowIcons.Play),
-    MUSIC(Res.string.music_title, FlowIcons.MusicNote),
-    SUBSCRIPTIONS(Res.string.nav_subscriptions, FlowIcons.Subscriptions),
-    LIBRARY(Res.string.nav_library, FlowIcons.Bookmark),
-    EXPLORE(Res.string.nav_explore, FlowIcons.Explore),
+    HOME(Res.string.nav_home, FlowIcons.HomeOutlined, FlowIcons.HomeFilled),
+    SHORTS(Res.string.nav_shorts, FlowIcons.ShortsOutlined, FlowIcons.ShortsFilled),
+    MUSIC(Res.string.nav_music, FlowIcons.MusicNoteOutlined, FlowIcons.MusicNoteFilled),
+    SUBSCRIPTIONS(Res.string.nav_subs, FlowIcons.SubscriptionsOutlined, FlowIcons.SubscriptionsFilled),
+    LIBRARY(Res.string.nav_library, FlowIcons.VideoLibraryOutlined, FlowIcons.VideoLibraryFilled),
+    EXPLORE(Res.string.nav_explore, FlowIcons.ExploreOutlined, FlowIcons.ExploreFilled),
 }
+
+/** Material's own cap: five destinations in a bar, the rest behind the More item. */
+private const val MAX_BAR_TABS = 5
 
 /**
  * Where the app swaps its bottom bar for a side rail: the same window-width breakpoint Material's
@@ -136,19 +149,66 @@ internal fun FlowNavigationBar(
     selected: FlowTab?,
     onSelect: (FlowTab) -> Unit,
 ) {
-    ShortNavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-        FlowTab.entries.forEach { tab ->
-            ShortNavigationBarItem(
-                selected = tab == selected,
-                onClick = { onSelect(tab) },
-                icon = {
-                    Icon(
-                        imageVector = tab.icon,
-                        contentDescription = null,
+    val barTabs = FlowTab.entries.take(MAX_BAR_TABS)
+    val overflowTabs = FlowTab.entries.drop(MAX_BAR_TABS)
+    var overflowOpen by remember { mutableStateOf(false) }
+    // ShortNavigationBar's own layout clips a sixth child, so the bar is a row of equal slots: the
+    // five destinations Material allows, plus More when an extra tab needs a home.
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .height(80.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            barTabs.forEach { tab ->
+                val isSelected = tab == selected
+                Box(modifier = Modifier.fillMaxHeight()) {
+                    ShortNavigationBarItem(
+                        selected = isSelected,
+                        onClick = { onSelect(tab) },
+                        icon = {
+                            Icon(
+                                imageVector = if (isSelected) tab.selectedIcon else tab.icon,
+                                contentDescription = null,
+                            )
+                        },
+                        label = { Text(text = stringResource(tab.label)) },
                     )
-                },
-                label = { Text(text = stringResource(tab.label)) },
-            )
+                }
+            }
+            if (overflowTabs.isNotEmpty()) {
+                Box(modifier = Modifier.fillMaxHeight()) {
+                    ShortNavigationBarItem(
+                        selected = selected in overflowTabs,
+                        onClick = { overflowOpen = true },
+                        icon = { Icon(imageVector = FlowIcons.MoreHoriz, contentDescription = null) },
+                        label = { Text(text = stringResource(Res.string.nav_more)) },
+                    )
+                }
+            }
+        }
+    }
+    if (overflowTabs.isNotEmpty()) {
+        DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
+            overflowTabs.forEach { tab ->
+                val isSelected = tab == selected
+                DropdownMenuItem(
+                    text = { Text(text = stringResource(tab.label)) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = if (isSelected) tab.selectedIcon else tab.icon,
+                            contentDescription = null,
+                        )
+                    },
+                    onClick = {
+                        overflowOpen = false
+                        onSelect(tab)
+                    },
+                )
+            }
         }
     }
 }
@@ -173,12 +233,13 @@ internal fun FlowNavigationRail(
         },
     ) {
         FlowTab.entries.forEach { tab ->
+            val isSelected = tab == selected
             NavigationRailItem(
-                selected = tab == selected,
+                selected = isSelected,
                 onClick = { onSelect(tab) },
                 icon = {
                     Icon(
-                        imageVector = tab.icon,
+                        imageVector = if (isSelected) tab.selectedIcon else tab.icon,
                         contentDescription = null,
                     )
                 },
