@@ -1,0 +1,695 @@
+{
+  "overlay": {
+    "reelPlayerOverlayRenderer": {
+      "reelPlayerHeaderSupportedRenderers": {
+        "reelPlayerHeaderRenderer": {
+          "timestampText": {
+            "simpleText": "1 month ago"
+          },
+          "trackingParams": "CEcQq6cCIhMIrf-CkrGdmAMVfpXYBR0Bhgew",
+          "accessibility": {
+            "accessibilityData": {
+              "label": "Saved a sea snakes and gave them another chance at life 🥹 @PetsSwag 1 month ago"
+            }
+          },
+          "reelTitleOnClickCommand": {
+            "clickTrackingParams": "CEcQq6cCIhMIrf-CkrGdmAMVfpXYBR0BhgewygEEDNzUcA==",
+            "showEngagementPanelEndpoint": {
+              "forcePortrait": false,
+              "identifier": {
+                "surface": "ENGAGEMENT_PANEL_SURFACE_SHORTS",
+                "tag": "engagement-panel-structured-description"
+              }
+            }
+          }
+        }
+      },
+      "playerOverlay": {
+        "reelPlayerOverlayViewModel": {
+          "metapanel": {
+            "reelMetapanelViewModel": {
+              "metadataItems": [
+                {
+                  "reelChannelBarViewModel": {
+                    "decoratedAvatarViewModel": {
+                      "decoratedAvatarViewModel": {
+                        "avatar": {
+                          "avatarViewModel": {
+                            "image": {
+                              "sources": [
+                                {
+                                  "url": "https://yt3.ggpht.com/qZmHN6zZ945w1aET2KP07o20sNAEMuSzD3ij9lAHinhNmJpsVQpKhSh8OjXSQAa7rqQvE96qM6c=s48-c-k-c0x00ffffff-no-rj"
+                                }
+                              ],
+                              "processor": {
+                                "borderImageProcessor": {
+                                  "circular": true
+                                }
+                              }
+                            },
+                            "avatarImageSize": "AVATAR_SIZE_S"
+                          }
+                        },
+                        "a11yLabel": "Go to channel @PetsSwag",
+                        "rendererContext": {
+                          "commandContext": {
+                            "onTap": {
+                              "innertubeCommand": {
+                                "clickTrackingParams": "CDwQlsgJGAAiEwit_4KSsZ2YAxV-ldgFHQGGB7DKAQQM3NRw",
+                                "commandMetadata": {
+                                  "webCommandMetadata": {
+                                    "url": "/@PetsSwag/shorts",
+                                    "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                    "rootVe": 3611,
+                                    "apiUrl": "/youtubei/v1/browse"
+                                  }
+                                },
+                                "browseEndpoint": {
+                                  "browseId": "UCZ_r5HesKAr9EJInthnPSoA",
+                                  "params": "8gYKCgiaAQCiAQIIAQ%3D%3D",
+                                  "canonicalBaseUrl": "/@PetsSwag/shorts"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "channelName": {
+                      "content": "@PetsSwag",
+                      "commandRuns": [
+                        {
+                          "startIndex": 0,
+                          "length": 9,
+                          "onTap": {
+                            "innertubeCommand": {
+                              "clickTrackingParams": "CDwQlsgJGAAiEwit_4KSsZ2YAxV-ldgFHQGGB7DKAQQM3NRw",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@PetsSwag/shorts",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCZ_r5HesKAr9EJInthnPSoA",
+                                "params": "8gYKCgiaAQCiAQIIAQ%3D%3D",
+                                "canonicalBaseUrl": "/@PetsSwag/shorts"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "subscribeButtonViewModel": {
+                      "buttonViewModel": {
+                        "title": "Subscribe",
+                        "onTap": {
+                          "innertubeCommand": {
+                            "clickTrackingParams": "CD0Q8FsiEwit_4KSsZ2YAxV-ldgFHQGGB7DKAQQM3NRw",
+                            "commandMetadata": {
+                              "webCommandMetadata": {
+                                "ignoreNavigation": true
+                              }
+                            },
+                            "modalEndpoint": {
+                              "modal": {
+                                "modalWithTitleAndButtonRenderer": {
+                                  "title": {
+                                    "simpleText": "Want to subscribe to this channel?"
+                                  },
+                                  "content": {
+                                    "simpleText": "Sign in to subscribe to this channel."
+                                  },
+                                  "button": {
+                                    "buttonRenderer": {
+                                      "style": "STYLE_MONO_FILLED",
+                                      "size": "SIZE_DEFAULT",
+                                      "isDisabled": false,
+                                      "text": {
+                                        "simpleText": "Sign in"
+                                      },
+                                      "navigationEndpoint": {
+                                        "clickTrackingParams": "CD4Q_YYEIhMIrf-CkrGdmAMVfpXYBR0BhgewMglzdWJzY3JpYmXKAQQM3NRw",
+                                        "commandMetadata": {
+                                          "webCommandMetadata": {
+                                            "url": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3D%252Fwatch%253Fv%253DU9KjvoAoQZA%26continue_action%3DQUlxb01IYUxqb2gyWmxiU2JsUjFQVlBaWGxMQnxBQnJ0NjlsUEEwM21LT3E1NThHZ2ZDOWFhUHo3X2ROdlVENXd6eTNuTVFxSUtuRkVTWWVESVVoX25pMUwxUkJZUXc4M3lfRElaYkRiNnhrQ0N3REEtYjR0ZlNzNllCNW9mcDlfM1N1WU1DcWRrZDllQkd0UUZnWUtibU1FSzlEaXJaXzQwUjNLM01PSFd6VWgyTllhU2J6NzVmU0lWcGd5S0dzSjdEcmNSTnZDM0pZa0M5emQ5MS1zSFNR&hl=en&ec=66429",
+                                            "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                                            "rootVe": 83769
+                                          }
+                                        },
+                                        "signInEndpoint": {
+                                          "nextEndpoint": {
+                                            "clickTrackingParams": "CD4Q_YYEIhMIrf-CkrGdmAMVfpXYBR0BhgewygEEDNzUcA==",
+                                            "commandMetadata": {
+                                              "webCommandMetadata": {
+                                                "url": "/watch?v=U9KjvoAoQZA",
+                                                "webPageType": "WEB_PAGE_TYPE_WATCH",
+                                                "rootVe": 3832
+                                              }
+                                            },
+                                            "watchEndpoint": {
+                                              "videoId": "U9KjvoAoQZA"
+                                            }
+                                          },
+                                          "continueAction": "QUlxb01IYUxqb2gyWmxiU2JsUjFQVlBaWGxMQnxBQnJ0NjlsUEEwM21LT3E1NThHZ2ZDOWFhUHo3X2ROdlVENXd6eTNuTVFxSUtuRkVTWWVESVVoX25pMUwxUkJZUXc4M3lfRElaYkRiNnhrQ0N3REEtYjR0ZlNzNllCNW9mcDlfM1N1WU1DcWRrZDllQkd0UUZnWUtibU1FSzlEaXJaXzQwUjNLM01PSFd6VWgyTllhU2J6NzVmU0lWcGd5S0dzSjdEcmNSTnZDM0pZa0M5emQ5MS1zSFNR",
+                                          "idamTag": "66429"
+                                        }
+                                      },
+                                      "trackingParams": "CD4Q_YYEIhMIrf-CkrGdmAMVfpXYBR0Bhgew"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "accessibilityText": "Subscribe",
+                        "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+                        "trackingParams": "CD0Q8FsiEwit_4KSsZ2YAxV-ldgFHQGGB7A=",
+                        "isFullWidth": false,
+                        "type": "BUTTON_VIEW_MODEL_TYPE_FILLED",
+                        "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+                        "state": "BUTTON_VIEW_MODEL_STATE_ACTIVE"
+                      }
+                    },
+                    "subscribeStateEntityStoreKey": "EhhVQ1pfcjVIZXNLQXI5RUpJbnRoblBTb0EgMygB",
+                    "sponsorStateEntityStoreKey": "EhhVQ1pfcjVIZXNLQXI5RUpJbnRoblBTb0Eg_wIoAQ%3D%3D",
+                    "alcPurchaseStateEntityStoreKey": "EhhVQ1pfcjVIZXNLQXI5RUpJbnRoblBTb0Eg4QMoAQ%3D%3D",
+                    "endPositionActionButton": false,
+                    "rendererContext": {
+                      "loggingContext": {
+                        "loggingDirectives": {
+                          "trackingParams": "CDwQlsgJGAAiEwit_4KSsZ2YAxV-ldgFHQGGB7A=",
+                          "visibility": {
+                            "types": "12"
+                          },
+                          "attentionLogging": "ATTENTION_LOGGING_BASIC"
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "shortsVideoTitleViewModel": {
+                    "text": {
+                      "content": "Saved a sea snakes and gave them another chance at life 🥹"
+                    },
+                    "maxLines": 1,
+                    "truncatedTextOnTapCommand": {
+                      "innertubeCommand": {
+                        "clickTrackingParams": "CDsQia4LGAEiEwit_4KSsZ2YAxV-ldgFHQGGB7DKAQQM3NRw",
+                        "showEngagementPanelEndpoint": {
+                          "forcePortrait": false,
+                          "identifier": {
+                            "surface": "ENGAGEMENT_PANEL_SURFACE_SHORTS",
+                            "tag": "engagement-panel-structured-description"
+                          }
+                        }
+                      }
+                    },
+                    "loggingDirectives": {
+                      "trackingParams": "CDsQia4LGAEiEwit_4KSsZ2YAxV-ldgFHQGGB7A=",
+                      "visibility": {
+                        "types": "12"
+                      },
+                      "attentionLogging": "ATTENTION_LOGGING_BASIC"
+                    }
+                  }
+                },
+                {
+                  "reelCarouselViewModel": {
+                    "buttonViewModels": [
+                      {
+                        "reelCarouselButtonViewModel": {
+                          "buttonViewModel": {
+                            "buttonViewModel": {
+                              "onTap": {
+                                "innertubeCommand": {
+                                  "clickTrackingParams": "CDoQleIJIhMIrf-CkrGdmAMVfpXYBR0BhgewygEEDNzUcA==",
+                                  "showEngagementPanelEndpoint": {
+                                    "identifier": {
+                                      "surface": "ENGAGEMENT_PANEL_SURFACE_SHORTS",
+                                      "tag": "engagement-panel-shorts-audio-pivot"
+                                    }
+                                  }
+                                }
+                              },
+                              "style": "BUTTON_VIEW_MODEL_STYLE_OVERLAY",
+                              "trackingParams": "CDoQleIJIhMIrf-CkrGdmAMVfpXYBR0Bhgew",
+                              "type": "BUTTON_VIEW_MODEL_TYPE_TONAL",
+                              "buttonSize": "BUTTON_VIEW_MODEL_SIZE_XSMALL",
+                              "titleFormatted": {
+                                "content": "Main Agar (From \"Tubelight\") · Pritam & Atif Aslam"
+                              },
+                              "iconImage": {
+                                "clientResource": {
+                                  "imageName": "MUSIC_NOTE_SYMBOL"
+                                }
+                              },
+                              "loggingDirectives": {
+                                "trackingParams": "CDoQleIJIhMIrf-CkrGdmAMVfpXYBR0Bhgew",
+                                "visibility": {
+                                  "types": "12"
+                                },
+                                "attentionLogging": "ATTENTION_LOGGING_BASIC"
+                              }
+                            }
+                          },
+                          "maxWidthPercent": 0.95
+                        }
+                      }
+                    ],
+                    "enableMaxItemWidth": true
+                  }
+                }
+              ]
+            }
+          },
+          "actionBar": {
+            "reelActionBarViewModel": {
+              "buttonViewModels": [
+                {
+                  "likeButtonViewModel": {
+                    "toggleButtonViewModel": {
+                      "toggleButtonViewModel": {
+                        "defaultButtonViewModel": {
+                          "buttonViewModel": {
+                            "iconName": "EMPTY_HEART",
+                            "title": "196K",
+                            "onTap": {
+                              "innertubeCommand": {
+                                "clickTrackingParams": "CDgQ-OgKIhMIrf-CkrGdmAMVfpXYBR0BhgewygEEDNzUcA==",
+                                "commandMetadata": {
+                                  "webCommandMetadata": {
+                                    "ignoreNavigation": true
+                                  }
+                                },
+                                "modalEndpoint": {
+                                  "modal": {
+                                    "modalWithTitleAndButtonRenderer": {
+                                      "title": {
+                                        "runs": [
+                                          {
+                                            "text": "Like this video?"
+                                          }
+                                        ]
+                                      },
+                                      "content": {
+                                        "runs": [
+                                          {
+                                            "text": "Sign in to make your opinion count."
+                                          }
+                                        ]
+                                      },
+                                      "button": {
+                                        "buttonRenderer": {
+                                          "style": "STYLE_MONO_FILLED",
+                                          "size": "SIZE_DEFAULT",
+                                          "isDisabled": false,
+                                          "text": {
+                                            "simpleText": "Sign in"
+                                          },
+                                          "navigationEndpoint": {
+                                            "clickTrackingParams": "CDkQ8FsiEwit_4KSsZ2YAxV-ldgFHQGGB7DKAQQM3NRw",
+                                            "commandMetadata": {
+                                              "webCommandMetadata": {
+                                                "url": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3D%252Fwatch%253Fv%253DU9KjvoAoQZA&hl=en",
+                                                "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                                                "rootVe": 83769
+                                              }
+                                            },
+                                            "signInEndpoint": {
+                                              "hack": true,
+                                              "nextEndpoint": {
+                                                "clickTrackingParams": "CDkQ8FsiEwit_4KSsZ2YAxV-ldgFHQGGB7DKAQQM3NRw",
+                                                "commandMetadata": {
+                                                  "webCommandMetadata": {
+                                                    "url": "/watch?v=U9KjvoAoQZA",
+                                                    "webPageType": "WEB_PAGE_TYPE_WATCH",
+                                                    "rootVe": 3832
+                                                  }
+                                                },
+                                                "watchEndpoint": {
+                                                  "videoId": "U9KjvoAoQZA"
+                                                }
+                                              }
+                                            }
+                                          },
+                                          "trackingParams": "CDkQ8FsiEwit_4KSsZ2YAxV-ldgFHQGGB7A="
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "accessibilityText": "like this video along with 196 thousand other people",
+                            "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+                            "trackingParams": "CDgQ-OgKIhMIrf-CkrGdmAMVfpXYBR0Bhgew",
+                            "type": "BUTTON_VIEW_MODEL_TYPE_TONAL",
+                            "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+                            "state": "BUTTON_VIEW_MODEL_STATE_ACTIVE",
+                            "accessibilityId": "id.reel_like_button",
+                            "useYoutubeLoggingDirectives": true,
+                            "shouldLogGestures": true,
+                            "targetId": "",
+                            "tooltip": "I like this",
+                            "loggingDirectives": {
+                              "trackingParams": "CDgQ-OgKIhMIrf-CkrGdmAMVfpXYBR0Bhgew",
+                              "visibility": {
+                                "types": "12"
+                              },
+                              "attentionLogging": "ATTENTION_LOGGING_BASIC"
+                            }
+                          }
+                        },
+                        "toggledButtonViewModel": {
+                          "buttonViewModel": {
+                            "iconName": "FULL_HEART",
+                            "title": "196K",
+                            "onTap": {
+                              "innertubeCommand": {
+                                "clickTrackingParams": "CDYQ-OgKIhMIrf-CkrGdmAMVfpXYBR0BhgewygEEDNzUcA==",
+                                "commandMetadata": {
+                                  "webCommandMetadata": {
+                                    "ignoreNavigation": true
+                                  }
+                                },
+                                "modalEndpoint": {
+                                  "modal": {
+                                    "modalWithTitleAndButtonRenderer": {
+                                      "title": {
+                                        "runs": [
+                                          {
+                                            "text": "Like this video?"
+                                          }
+                                        ]
+                                      },
+                                      "content": {
+                                        "runs": [
+                                          {
+                                            "text": "Sign in to make your opinion count."
+                                          }
+                                        ]
+                                      },
+                                      "button": {
+                                        "buttonRenderer": {
+                                          "style": "STYLE_MONO_FILLED",
+                                          "size": "SIZE_DEFAULT",
+                                          "isDisabled": false,
+                                          "text": {
+                                            "simpleText": "Sign in"
+                                          },
+                                          "navigationEndpoint": {
+                                            "clickTrackingParams": "CDcQ8FsiEwit_4KSsZ2YAxV-ldgFHQGGB7DKAQQM3NRw",
+                                            "commandMetadata": {
+                                              "webCommandMetadata": {
+                                                "url": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3D%252Fwatch%253Fv%253DU9KjvoAoQZA&hl=en",
+                                                "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                                                "rootVe": 83769
+                                              }
+                                            },
+                                            "signInEndpoint": {
+                                              "hack": true,
+                                              "nextEndpoint": {
+                                                "clickTrackingParams": "CDcQ8FsiEwit_4KSsZ2YAxV-ldgFHQGGB7DKAQQM3NRw",
+                                                "commandMetadata": {
+                                                  "webCommandMetadata": {
+                                                    "url": "/watch?v=U9KjvoAoQZA",
+                                                    "webPageType": "WEB_PAGE_TYPE_WATCH",
+                                                    "rootVe": 3832
+                                                  }
+                                                },
+                                                "watchEndpoint": {
+                                                  "videoId": "U9KjvoAoQZA"
+                                                }
+                                              }
+                                            }
+                                          },
+                                          "trackingParams": "CDcQ8FsiEwit_4KSsZ2YAxV-ldgFHQGGB7A="
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "accessibilityText": "196,275 likes",
+                            "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+                            "trackingParams": "CDYQ-OgKIhMIrf-CkrGdmAMVfpXYBR0Bhgew",
+                            "type": "BUTTON_VIEW_MODEL_TYPE_FILLED",
+                            "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+                            "state": "BUTTON_VIEW_MODEL_STATE_ACTIVE",
+                            "accessibilityId": "id.reel_like_toggled_button",
+                            "useYoutubeLoggingDirectives": true,
+                            "shouldLogGestures": true,
+                            "targetId": "",
+                            "tooltip": "Unlike",
+                            "loggingDirectives": {
+                              "trackingParams": "CDYQ-OgKIhMIrf-CkrGdmAMVfpXYBR0Bhgew",
+                              "visibility": {
+                                "types": "12"
+                              },
+                              "attentionLogging": "ATTENTION_LOGGING_BASIC"
+                            }
+                          }
+                        },
+                        "isToggled": false,
+                        "trackingParams": "CC8Qwr4LIhMIrf-CkrGdmAMVfpXYBR0Bhgew",
+                        "isTogglingDisabled": true
+                      }
+                    },
+                    "likeStatusEntityKey": "EgtVOUtqdm9Bb1FaQSA-KAE%3D",
+                    "likeStatusEntity": {
+                      "key": "EgtVOUtqdm9Bb1FaQSA-KAE%3D",
+                      "likeStatus": "INDIFFERENT"
+                    }
+                  }
+                },
+                {
+                  "buttonViewModel": {
+                    "iconName": "SHORTS_COMMENT",
+                    "title": "832",
+                    "onTap": {
+                      "innertubeCommand": {
+                        "clickTrackingParams": "CDUQztQDGAEiEwit_4KSsZ2YAxV-ldgFHQGGB7DKAQQM3NRw",
+                        "showEngagementPanelEndpoint": {
+                          "identifier": {
+                            "surface": "ENGAGEMENT_PANEL_SURFACE_SHORTS",
+                            "tag": "shorts-comments-panel"
+                          }
+                        }
+                      }
+                    },
+                    "accessibilityText": "View 832 comments",
+                    "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+                    "trackingParams": "CDUQztQDGAEiEwit_4KSsZ2YAxV-ldgFHQGGB7A=",
+                    "type": "BUTTON_VIEW_MODEL_TYPE_TONAL",
+                    "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+                    "state": "BUTTON_VIEW_MODEL_STATE_ACTIVE",
+                    "accessibilityId": "id.reel_comment_button",
+                    "useYoutubeLoggingDirectives": true,
+                    "shouldLogGestures": false,
+                    "targetId": "",
+                    "tooltip": "Comments",
+                    "loggingDirectives": {
+                      "trackingParams": "CDUQztQDGAEiEwit_4KSsZ2YAxV-ldgFHQGGB7A=",
+                      "visibility": {
+                        "types": "12"
+                      },
+                      "attentionLogging": "ATTENTION_LOGGING_BASIC"
+                    }
+                  }
+                },
+                {
+                  "buttonViewModel": {
+                    "iconName": "SHORTS_SHARE",
+                    "title": "Share",
+                    "onTap": {
+                      "innertubeCommand": {
+                        "clickTrackingParams": "CDMQ5ZYBGAIiEwit_4KSsZ2YAxV-ldgFHQGGB7DKAQQM3NRw",
+                        "commandMetadata": {
+                          "webCommandMetadata": {
+                            "sendPost": true,
+                            "apiUrl": "/youtubei/v1/share/get_share_panel"
+                          }
+                        },
+                        "shareEntityServiceEndpoint": {
+                          "serializedShareEntity": "CgtVOUtqdm9Bb1FaQVICCAKgAQM%3D",
+                          "commands": [
+                            {
+                              "clickTrackingParams": "CDMQ5ZYBGAIiEwit_4KSsZ2YAxV-ldgFHQGGB7DKAQQM3NRw",
+                              "openPopupAction": {
+                                "popup": {
+                                  "unifiedSharePanelRenderer": {
+                                    "trackingParams": "CDQQjmIiEwit_4KSsZ2YAxV-ldgFHQGGB7A=",
+                                    "showLoadingSpinner": true
+                                  }
+                                },
+                                "popupType": "DIALOG",
+                                "beReused": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "accessibilityText": "Share",
+                    "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+                    "trackingParams": "CDMQ5ZYBGAIiEwit_4KSsZ2YAxV-ldgFHQGGB7A=",
+                    "type": "BUTTON_VIEW_MODEL_TYPE_TONAL",
+                    "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+                    "state": "BUTTON_VIEW_MODEL_STATE_ACTIVE",
+                    "accessibilityId": "id.reel_share_button",
+                    "useYoutubeLoggingDirectives": true,
+                    "shouldLogGestures": false,
+                    "targetId": "",
+                    "tooltip": "Share",
+                    "loggingDirectives": {
+                      "trackingParams": "CDMQ5ZYBGAIiEwit_4KSsZ2YAxV-ldgFHQGGB7A=",
+                      "visibility": {
+                        "types": "12"
+                      },
+                      "attentionLogging": "ATTENTION_LOGGING_BASIC"
+                    }
+                  }
+                },
+                {
+                  "buttonViewModel": {
+                    "iconName": "REMIX_FILLED",
+                    "title": "Remix",
+                    "onTap": {
+                      "innertubeCommand": {
+                        "clickTrackingParams": "CDEQqNMJGAMiEwit_4KSsZ2YAxV-ldgFHQGGB7DKAQQM3NRw",
+                        "addToToastAction": {
+                          "item": {
+                            "notificationTextRenderer": {
+                              "successResponseText": {
+                                "runs": [
+                                  {
+                                    "text": "Feature not available for this video"
+                                  }
+                                ]
+                              },
+                              "trackingParams": "CDIQyscDIhMIrf-CkrGdmAMVfpXYBR0Bhgew"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "accessibilityText": "Remix",
+                    "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+                    "trackingParams": "CDEQqNMJGAMiEwit_4KSsZ2YAxV-ldgFHQGGB7A=",
+                    "type": "BUTTON_VIEW_MODEL_TYPE_TONAL",
+                    "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+                    "state": "BUTTON_VIEW_MODEL_STATE_DISABLED",
+                    "accessibilityId": "id.reel_remix_button",
+                    "useYoutubeLoggingDirectives": true,
+                    "shouldLogGestures": true,
+                    "targetId": "",
+                    "tooltip": "Remix",
+                    "loggingDirectives": {
+                      "trackingParams": "CDEQqNMJGAMiEwit_4KSsZ2YAxV-ldgFHQGGB7A=",
+                      "visibility": {
+                        "types": "12"
+                      },
+                      "attentionLogging": "ATTENTION_LOGGING_BASIC"
+                    }
+                  }
+                },
+                {
+                  "pivotButtonViewModel": {
+                    "thumbnail": {
+                      "sources": [
+                        {
+                          "url": "https://yt3.googleusercontent.com/BPoA2mlKSxVz4RzIjVgZc01KAFNg9RfQS2quOnxujuWQETCwRdscUUv2KNlK3Qdo5VsutPlqlrHsYdXa=h48",
+                          "width": 48,
+                          "height": 48
+                        },
+                        {
+                          "url": "https://yt3.googleusercontent.com/BPoA2mlKSxVz4RzIjVgZc01KAFNg9RfQS2quOnxujuWQETCwRdscUUv2KNlK3Qdo5VsutPlqlrHsYdXa=h88",
+                          "width": 88,
+                          "height": 88
+                        },
+                        {
+                          "url": "https://yt3.googleusercontent.com/BPoA2mlKSxVz4RzIjVgZc01KAFNg9RfQS2quOnxujuWQETCwRdscUUv2KNlK3Qdo5VsutPlqlrHsYdXa=h176",
+                          "width": 176,
+                          "height": 176
+                        }
+                      ]
+                    },
+                    "onClickCommand": {
+                      "innertubeCommand": {
+                        "clickTrackingParams": "CDAQ6IUGGAQiEwit_4KSsZ2YAxV-ldgFHQGGB7DKAQQM3NRw",
+                        "showEngagementPanelEndpoint": {
+                          "identifier": {
+                            "surface": "ENGAGEMENT_PANEL_SURFACE_SHORTS",
+                            "tag": "engagement-panel-shorts-audio-pivot"
+                          }
+                        }
+                      }
+                    },
+                    "trackingParams": "CDAQ6IUGGAQiEwit_4KSsZ2YAxV-ldgFHQGGB7A=",
+                    "contentDescription": "See more videos using this sound",
+                    "soundAttributionTitle": {
+                      "content": "Main Agar (From \"Tubelight\")",
+                      "commandRuns": [
+                        {
+                          "startIndex": 0,
+                          "length": 28,
+                          "onTap": {
+                            "innertubeCommand": {
+                              "clickTrackingParams": "CDAQ6IUGGAQiEwit_4KSsZ2YAxV-ldgFHQGGB7DKAQQM3NRw",
+                              "showEngagementPanelEndpoint": {
+                                "identifier": {
+                                  "surface": "ENGAGEMENT_PANEL_SURFACE_SHORTS",
+                                  "tag": "engagement-panel-shorts-audio-pivot"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      "styleRuns": [
+                        {
+                          "startIndex": 0,
+                          "length": 28,
+                          "weightLabel": "FONT_WEIGHT_NORMAL"
+                        }
+                      ]
+                    },
+                    "waveformAnimationStyle": "WAVEFORM_ANIMATION_STYLE_DEFAULT",
+                    "backgroundAnimationStyle": "BACKGROUND_ANIMATION_STYLE_DEFAULT",
+                    "loggingDirectives": {
+                      "trackingParams": "CDAQ6IUGGAQiEwit_4KSsZ2YAxV-ldgFHQGGB7A=",
+                      "visibility": {
+                        "types": "12"
+                      },
+                      "attentionLogging": "ATTENTION_LOGGING_BASIC"
+                    }
+                  }
+                }
+              ],
+              "rendererContext": {
+                "loggingContext": {
+                  "loggingDirectives": {
+                    "trackingParams": "CC8Qwr4LIhMIrf-CkrGdmAMVfpXYBR0Bhgew",
+                    "visibility": {
+                      "types": "12"
+                    },
+                    "attentionLogging": "ATTENTION_LOGGING_BASIC"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "style": "REEL_PLAYER_OVERLAY_STYLE_SHORTS",
+      "trackingParams": "CC4QsLUEIhMIrf-CkrGdmAMVfpXYBR0Bhgew"
+    }
+  },
+  "status": "REEL_ITEM_WATCH_STATUS_SUCCEEDED"
+}

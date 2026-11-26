@@ -1,0 +1,410 @@
+{
+  "frameworkUpdates": {
+    "entityBatchUpdate": {
+      "mutations": [
+        {
+          "entityKey": "EhpVZ3lWMHppUk9pRVRfYzVQUTUxNEFhQUJBZyAoKAE%3D",
+          "type": "ENTITY_MUTATION_TYPE_REPLACE",
+          "payload": {
+            "commentEntityPayload": {
+              "key": "EhpVZ3lWMHppUk9pRVRfYzVQUTUxNEFhQUJBZyAoKAE%3D",
+              "properties": {
+                "commentId": "UgyV0ziROiET_c5PQ514AaABAg",
+                "content": {
+                  "content": "German me trolleo  0:01 ",
+                  "commandRuns": [
+                    {
+                      "startIndex": 18,
+                      "length": 6,
+                      "onTap": {
+                        "innertubeCommand": {
+                          "clickTrackingParams": "CAAQg2ciEwjYg-LHnJyYAxX5cJ0JHbzFCYnKAQRku_jl",
+                          "watchEndpoint": {
+                            "videoId": "dQw4w9WgXcQ",
+                            "startTimeSeconds": 1,
+                            "watchEndpointMainAppConfig": {
+                              "seekSource": "SEEK_SOURCE_TIMESTAMP_IN_COMMENTS"
+                            },
+                            "watchEndpointSupportedOnesieConfig": {
+                              "iosPlaybackOnesieConfig": {
+                                "commonConfig": {
+                                  "url": "https://rr2---sn-u5jitvojvhpo-a3vs.googlevideo.com/initplayback?source=youtube&oeis=1&c=IOS&oad=5500&ovd=5500&oaad=11000&oavd=11000&ocs=700&oputc=1&oses=1&epbp=1&msp=1&odepv=1&id=750c38c3d5a05dc4&initcwndbps=1821250&mt=1795372174",
+                                  "ustreamerConfig": "ChUSEDc1MGMzOGMzZDVhMDVkYzQY6AcyDzEwMy4xNjQuMjExLjEyOQ=="
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "styleRuns": [
+                    {
+                      "startIndex": 18,
+                      "length": 6,
+                      "fontName": "SanFrancisco-Medium",
+                      "fontColor": 4278607828
+                    },
+                    {
+                      "startIndex": 18,
+                      "length": 6,
+                      "backgroundColor": 4292801023
+                    }
+                  ]
+                },
+                "publishedTime": "6mo ago (edited)",
+                "replyLevel": 0,
+                "authorButtonA11y": "@diegoquintero3458",
+                "toolbarStateKey": "EhpVZ3lWMHppUk9pRVRfYzVQUTUxNEFhQUJBZyAsKAE%3D",
+                "translateButtonEntityKey": "",
+                "publishedTimeA11y": "6 months ago (edited)"
+              },
+              "author": {
+                "channelId": "UCdGqU4tgjKHq57plxwx8XRg",
+                "displayName": "@diegoquintero3458",
+                "avatarThumbnailUrl": "https://yt3.ggpht.com/ytc/AIdro_kBCJFR7JpKO9C6C63p7ekxW3NrtrR1mNA1a3dsXfg=s88-c-k-c0x00ffffff-no-rj",
+                "isVerified": false,
+                "isCurrentUser": false,
+                "isCreator": false,
+                "channelCommand": {
+                  "innertubeCommand": {
+                    "clickTrackingParams": "CAAQg2ciEwjYg-LHnJyYAxX5cJ0JHbzFCYnKAQRku_jl",
+                    "browseEndpoint": {
+                      "browseId": "UCdGqU4tgjKHq57plxwx8XRg",
+                      "canonicalBaseUrl": "/@diegoquintero3458"
+                    }
+                  }
+                },
+                "isArtist": false
+              },
+              "toolbar": {
+                "likeCountLiked": "22",
+                "likeCountNotliked": "21",
+                "replyCount": "2",
+                "likeButtonA11y": "Like this comment along with 21 other people",
+                "engagementToolbarStyle": {
+                  "value": "ENGAGEMENT_TOOLBAR_STYLE_VALUE_DEFAULT"
+                },
+                "likeCountA11y": "21 likes",
+                "replyCountA11y": "2 replies",
+                "likeAnimationEntityKey": "EhpVZ3lWMHppUk9pRVRfYzVQUTUxNEFhQUJBZyCuAigB",
+                "likeInactiveTooltip": "Like",
+                "likeActiveTooltip": "Unlike",
+                "dislikeInactiveTooltip": "Dislike",
+                "dislikeActiveTooltip": "Remove dislike",
+                "heartActiveTooltip": "❤ by @RickAstleyYT"
+              },
+              "readMoreLogging": {
+                "trackingParams": "CGIQr7QGIhMI2IPix5ycmAMV-XCdCR28xQmJ",
+                "loggingDirectives": {
+                  "trackingParams": "CGIQr7QGIhMI2IPix5ycmAMV-XCdCR28xQmJ",
+                  "visibility": {
+                    "types": "12"
+                  }
+                }
+              },
+              "loggingDirectives": {
+                "trackingParams": "CGEQuvQBIhMI2IPix5ycmAMV-XCdCR28xQmJ",
+                "visibility": {
+                  "types": "12"
+                },
+                "clientVeSpec": {
+                  "uiType": 15030,
+                  "veCounter": 411826524
+                }
+              }
+            }
+          }
+        },
+        {
+          "entityKey": "EhpVZ3loTVJJZG5RUk1TVEhIbUVGNEFhQUJBZyAoKAE%3D",
+          "type": "ENTITY_MUTATION_TYPE_REPLACE",
+          "payload": {
+            "commentEntityPayload": {
+              "key": "EhpVZ3loTVJJZG5RUk1TVEhIbUVGNEFhQUJBZyAoKAE%3D",
+              "properties": {
+                "commentId": "UgyhMRIdnQRMSTHHmEF4AaABAg",
+                "content": {
+                  "content": " 0:09  IS THAT YUKI FROM JJK",
+                  "commandRuns": [
+                    {
+                      "startIndex": 0,
+                      "length": 6,
+                      "onTap": {
+                        "innertubeCommand": {
+                          "clickTrackingParams": "CAAQg2ciEwjYg-LHnJyYAxX5cJ0JHbzFCYnKAQRku_jl",
+                          "watchEndpoint": {
+                            "videoId": "dQw4w9WgXcQ",
+                            "startTimeSeconds": 9,
+                            "watchEndpointMainAppConfig": {
+                              "seekSource": "SEEK_SOURCE_TIMESTAMP_IN_COMMENTS"
+                            },
+                            "watchEndpointSupportedOnesieConfig": {
+                              "iosPlaybackOnesieConfig": {
+                                "commonConfig": {
+                                  "url": "https://rr2---sn-u5jitvojvhpo-a3vs.googlevideo.com/initplayback?source=youtube&oeis=1&c=IOS&oad=5500&ovd=5500&oaad=11000&oavd=11000&ocs=700&oputc=1&oses=1&epbp=1&msp=1&odepv=1&id=750c38c3d5a05dc4&initcwndbps=1821250&mt=1795372174",
+                                  "ustreamerConfig": "ChUSEDc1MGMzOGMzZDVhMDVkYzQYqEYyDzEwMy4xNjQuMjExLjEyOQ=="
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "styleRuns": [
+                    {
+                      "startIndex": 0,
+                      "length": 6,
+                      "fontName": "SanFrancisco-Medium",
+                      "fontColor": 4278607828
+                    },
+                    {
+                      "startIndex": 0,
+                      "length": 6,
+                      "backgroundColor": 4292801023
+                    }
+                  ]
+                },
+                "publishedTime": "5mo ago",
+                "replyLevel": 0,
+                "authorButtonA11y": "@ricardosantos2207",
+                "toolbarStateKey": "EhpVZ3loTVJJZG5RUk1TVEhIbUVGNEFhQUJBZyAsKAE%3D",
+                "translateButtonEntityKey": "",
+                "publishedTimeA11y": "5 months ago"
+              },
+              "author": {
+                "channelId": "UCY5cJyrOlVrMqijLnauNIAg",
+                "displayName": "@ricardosantos2207",
+                "avatarThumbnailUrl": "https://yt3.ggpht.com/dACqRa4SbEkQLtJzv4JGHpNaE2tkUpGCu7q1U3CV2XerGbS8XC02kkirRecHX3BDYaYTa64bA7M=s88-c-k-c0x00ffffff-no-rj",
+                "isVerified": false,
+                "isCurrentUser": false,
+                "isCreator": false,
+                "channelCommand": {
+                  "innertubeCommand": {
+                    "clickTrackingParams": "CAAQg2ciEwjYg-LHnJyYAxX5cJ0JHbzFCYnKAQRku_jl",
+                    "browseEndpoint": {
+                      "browseId": "UCY5cJyrOlVrMqijLnauNIAg",
+                      "canonicalBaseUrl": "/@ricardosantos2207"
+                    }
+                  }
+                },
+                "isArtist": false
+              },
+              "toolbar": {
+                "likeCountLiked": "4",
+                "likeCountNotliked": "3",
+                "replyCount": "",
+                "likeButtonA11y": "Like this comment along with 3 other people",
+                "engagementToolbarStyle": {
+                  "value": "ENGAGEMENT_TOOLBAR_STYLE_VALUE_DEFAULT"
+                },
+                "likeCountA11y": "3 likes",
+                "replyCountA11y": "0 replies",
+                "likeAnimationEntityKey": "EhpVZ3loTVJJZG5RUk1TVEhIbUVGNEFhQUJBZyCuAigB",
+                "likeInactiveTooltip": "Like",
+                "likeActiveTooltip": "Unlike",
+                "dislikeInactiveTooltip": "Dislike",
+                "dislikeActiveTooltip": "Remove dislike",
+                "heartActiveTooltip": "❤ by @RickAstleyYT"
+              },
+              "readMoreLogging": {
+                "trackingParams": "CF0Qr7QGIhMI2IPix5ycmAMV-XCdCR28xQmJ",
+                "loggingDirectives": {
+                  "trackingParams": "CF0Qr7QGIhMI2IPix5ycmAMV-XCdCR28xQmJ",
+                  "visibility": {
+                    "types": "12"
+                  }
+                }
+              },
+              "loggingDirectives": {
+                "trackingParams": "CFwQuvQBIhMI2IPix5ycmAMV-XCdCR28xQmJ",
+                "visibility": {
+                  "types": "12"
+                },
+                "clientVeSpec": {
+                  "uiType": 15030,
+                  "veCounter": 411826523
+                }
+              }
+            }
+          }
+        },
+        {
+          "entityKey": "EhpVZ3piY3dBSTl2UGowY0dQRmZsNEFhQUJBZyAoKAE%3D",
+          "type": "ENTITY_MUTATION_TYPE_REPLACE",
+          "payload": {
+            "commentEntityPayload": {
+              "key": "EhpVZ3piY3dBSTl2UGowY0dQRmZsNEFhQUJBZyAoKAE%3D",
+              "properties": {
+                "commentId": "UgzbcwAI9vPj0cGPFfl4AaABAg",
+                "content": {
+                  "content": " 0:18   WE’RE NO STRANGERS TO LOVE",
+                  "commandRuns": [
+                    {
+                      "startIndex": 0,
+                      "length": 6,
+                      "onTap": {
+                        "innertubeCommand": {
+                          "clickTrackingParams": "CAAQg2ciEwjYg-LHnJyYAxX5cJ0JHbzFCYnKAQRku_jl",
+                          "watchEndpoint": {
+                            "videoId": "dQw4w9WgXcQ",
+                            "startTimeSeconds": 18,
+                            "watchEndpointMainAppConfig": {
+                              "seekSource": "SEEK_SOURCE_TIMESTAMP_IN_COMMENTS"
+                            },
+                            "watchEndpointSupportedOnesieConfig": {
+                              "iosPlaybackOnesieConfig": {
+                                "commonConfig": {
+                                  "url": "https://rr2---sn-u5jitvojvhpo-a3vs.googlevideo.com/initplayback?source=youtube&oeis=1&c=IOS&oad=5500&ovd=5500&oaad=11000&oavd=11000&ocs=700&oputc=1&oses=1&epbp=1&msp=1&odepv=1&id=750c38c3d5a05dc4&initcwndbps=1821250&mt=1795372174",
+                                  "ustreamerConfig": "ChYSEDc1MGMzOGMzZDVhMDVkYzQY0IwBMg8xMDMuMTY0LjIxMS4xMjk="
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "styleRuns": [
+                    {
+                      "startIndex": 0,
+                      "length": 6,
+                      "fontName": "SanFrancisco-Medium",
+                      "fontColor": 4278607828
+                    },
+                    {
+                      "startIndex": 0,
+                      "length": 6,
+                      "backgroundColor": 4292801023
+                    }
+                  ]
+                },
+                "publishedTime": "1y ago (edited)",
+                "replyLevel": 0,
+                "authorButtonA11y": "@phillycheesesteaks4459",
+                "toolbarStateKey": "EhpVZ3piY3dBSTl2UGowY0dQRmZsNEFhQUJBZyAsKAE%3D",
+                "translateButtonEntityKey": "",
+                "publishedTimeA11y": "1 year ago (edited)"
+              },
+              "author": {
+                "channelId": "UCPIQdrc9a0vuoCLxOsMvtbQ",
+                "displayName": "@phillycheesesteaks4459",
+                "avatarThumbnailUrl": "https://yt3.ggpht.com/3GsKVPUTxsR4eTAS1n0HDWVxgpMrzfEI6DgZ0APHADFiMermARUk2kzChmWr2FVyh_36NXY3JJE=s88-c-k-c0x00ffffff-no-rj",
+                "isVerified": false,
+                "isCurrentUser": false,
+                "isCreator": false,
+                "channelCommand": {
+                  "innertubeCommand": {
+                    "clickTrackingParams": "CAAQg2ciEwjYg-LHnJyYAxX5cJ0JHbzFCYnKAQRku_jl",
+                    "browseEndpoint": {
+                      "browseId": "UCPIQdrc9a0vuoCLxOsMvtbQ",
+                      "canonicalBaseUrl": "/@phillycheesesteaks4459"
+                    }
+                  }
+                },
+                "isArtist": false
+              },
+              "toolbar": {
+                "likeCountLiked": "3.9K",
+                "likeCountNotliked": "3.9K",
+                "replyCount": "374",
+                "likeButtonA11y": "Like this comment along with 3.9K other people",
+                "engagementToolbarStyle": {
+                  "value": "ENGAGEMENT_TOOLBAR_STYLE_VALUE_DEFAULT"
+                },
+                "likeCountA11y": "3.9K likes",
+                "replyCountA11y": "374 replies",
+                "likeAnimationEntityKey": "EhpVZ3piY3dBSTl2UGowY0dQRmZsNEFhQUJBZyCuAigB",
+                "likeInactiveTooltip": "Like",
+                "likeActiveTooltip": "Unlike",
+                "dislikeInactiveTooltip": "Dislike",
+                "dislikeActiveTooltip": "Remove dislike",
+                "heartActiveTooltip": "❤ by @RickAstleyYT"
+              },
+              "readMoreLogging": {
+                "trackingParams": "CFoQr7QGIhMI2IPix5ycmAMV-XCdCR28xQmJ",
+                "loggingDirectives": {
+                  "trackingParams": "CFoQr7QGIhMI2IPix5ycmAMV-XCdCR28xQmJ",
+                  "visibility": {
+                    "types": "12"
+                  }
+                }
+              },
+              "loggingDirectives": {
+                "trackingParams": "CFkQuvQBIhMI2IPix5ycmAMV-XCdCR28xQmJ",
+                "visibility": {
+                  "types": "12"
+                },
+                "clientVeSpec": {
+                  "uiType": 15030,
+                  "veCounter": 411826522
+                }
+              }
+            }
+          }
+        },
+        {
+          "entityKey": "EhpVZ3lWMHppUk9pRVRfYzVQUTUxNEFhQUJBZyAsKAE%3D",
+          "type": "ENTITY_MUTATION_TYPE_REPLACE",
+          "payload": {
+            "engagementToolbarStateEntityPayload": {
+              "key": "EhpVZ3lWMHppUk9pRVRfYzVQUTUxNEFhQUJBZyAsKAE%3D",
+              "likeState": "TOOLBAR_LIKE_STATE_INDIFFERENT",
+              "heartState": "TOOLBAR_HEART_STATE_UNHEARTED"
+            }
+          }
+        },
+        {
+          "entityKey": "EhpVZ3loTVJJZG5RUk1TVEhIbUVGNEFhQUJBZyAsKAE%3D",
+          "type": "ENTITY_MUTATION_TYPE_REPLACE",
+          "payload": {
+            "engagementToolbarStateEntityPayload": {
+              "key": "EhpVZ3loTVJJZG5RUk1TVEhIbUVGNEFhQUJBZyAsKAE%3D",
+              "likeState": "TOOLBAR_LIKE_STATE_INDIFFERENT",
+              "heartState": "TOOLBAR_HEART_STATE_UNHEARTED"
+            }
+          }
+        },
+        {
+          "entityKey": "EhpVZ3piY3dBSTl2UGowY0dQRmZsNEFhQUJBZyAsKAE%3D",
+          "type": "ENTITY_MUTATION_TYPE_REPLACE",
+          "payload": {
+            "engagementToolbarStateEntityPayload": {
+              "key": "EhpVZ3piY3dBSTl2UGowY0dQRmZsNEFhQUJBZyAsKAE%3D",
+              "likeState": "TOOLBAR_LIKE_STATE_INDIFFERENT",
+              "heartState": "TOOLBAR_HEART_STATE_UNHEARTED"
+            }
+          }
+        },
+        {
+          "entityKey": "Eh9kUXc0dzlXZ1hjUUNPTU1FTlRTX01BUktFUlNfS0VZIP4BKAE%3D",
+          "payload": {
+            "timedMarkersListSyncEntity": {
+              "timedListData": {
+                "sections": [
+                  {
+                    "timedSyncDataList": [
+                      {
+                        "videoTimeMs": "1000",
+                        "syncItemId": "UgyV0ziROiET_c5PQ514AaABAg"
+                      },
+                      {
+                        "videoTimeMs": "9000",
+                        "syncItemId": "UgyhMRIdnQRMSTHHmEF4AaABAg"
+                      },
+                      {
+                        "videoTimeMs": "18000",
+                        "syncItemId": "UgzbcwAI9vPj0cGPFfl4AaABAg"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

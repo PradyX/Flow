@@ -1,0 +1,75 @@
+{
+  "contents": {
+    "singleColumnBrowseResultsRenderer": {
+      "tabs": [
+        {
+          "tabRenderer": {
+            "selected": true,
+            "content": {
+              "sectionListRenderer": {
+                "contents": [
+                  {
+                    "itemSectionRenderer": {
+                      "contents": [
+                        {
+                          "messageRenderer": {
+                            "text": {
+                              "runs": [
+                                {
+                                  "text": "Explore your favorites"
+                                }
+                              ]
+                            },
+                            "trackingParams": "CAQQljsYACITCLmelv6znZgDFePQPAId5YktxA==",
+                            "button": {
+                              "buttonRenderer": {
+                                "style": "STYLE_DEFAULT",
+                                "isDisabled": false,
+                                "text": {
+                                  "runs": [
+                                    {
+                                      "text": "Sign in"
+                                    }
+                                  ]
+                                },
+                                "navigationEndpoint": {
+                                  "clickTrackingParams": "CAUQ8FsiEwi5npb-s52YAxXj0DwCHeWJLcTKAQTDM0Ww",
+                                  "signInEndpoint": {
+                                    "hack": true
+                                  }
+                                },
+                                "trackingParams": "CAUQ8FsiEwi5npb-s52YAxXj0DwCHeWJLcQ="
+                              }
+                            },
+                            "subtext": {
+                              "messageSubtextRenderer": {
+                                "text": {
+                                  "runs": [
+                                    {
+                                      "text": "Sign in to access tracks that you liked or saved"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "style": {
+                              "value": "RENDER_STYLE_VERTICAL_CENTERED"
+                            }
+                          }
+                        }
+                      ],
+                      "trackingParams": "CAMQuy8YACITCLmelv6znZgDFePQPAId5YktxA=="
+                    }
+                  }
+                ],
+                "trackingParams": "CAIQui8iEwi5npb-s52YAxXj0DwCHeWJLcQ="
+              }
+            },
+            "trackingParams": "CAEQ8JMBGAAiEwi5npb-s52YAxXj0DwCHeWJLcQ="
+          }
+        }
+      ]
+    }
+  },
+  "trackingParams": "CAAQhGciEwi5npb-s52YAxXj0DwCHeWJLcTKAQTDM0Ww"
+}

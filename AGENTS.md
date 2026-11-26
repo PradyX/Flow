@@ -450,7 +450,9 @@ rows, bespoke empty/error states, bespoke badges, bespoke formatters, or a secon
 3. Follow current Kotlin and Android best practices — when unsure, check official docs rather than guessing.
 4. DO NOT edit the app's Room database schema without explicit instruction (schema changes require a version bump and migration, handled deliberately).
 5. DO NOT bump the app version in any file — version bumps are done manually by the project owner.
-6. Every PR with a change users can notice adds a nightly note: one new file
+6. Always run the build and test on the connected adb device (`adb devices` over wireless debugging), never an emulator, unless the owner explicitly asks for the emulator.
+7. Always kill leftover Java/Gradle background processes (`./gradlew --stop`, stray `java`/Gradle daemons you started) once they are no longer needed.
+8. Every PR with a change users can notice adds a nightly note: one new file
    `.github/nightly-notes/YYYY-MM-DD-<branch>.md` (the date the PR is opened, the branch name in
    lowercase with `/` replaced by `-`) holding `## New`, `## Improved` or `## Fixed` headings, each
    with one short `- ` bullet per change, written for users, issues as `(#123)`, no em-dashes. One

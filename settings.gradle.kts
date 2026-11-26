@@ -18,3 +18,8 @@ dependencyResolutionManagement {
 rootProject.name = "Flow"
 include(":app")
 include(":benchmark")
+
+// Compose Multiplatform port (`cmp` branch): shared UI + the per-platform shells.
+include(":shared")
+include(":androidApp")
+include(":desktopApp")

@@ -1,0 +1,222 @@
+{
+  "responseContext": {
+    "visitorData": "CgtmaXh0dXJlVmlkZW9Ib21l"
+  },
+  "contents": {
+    "twoColumnBrowseResultsRenderer": {
+      "tabs": [
+        {
+          "tabRenderer": {
+            "title": "Home",
+            "selected": true,
+            "content": {
+              "richGridRenderer": {
+                "header": {
+                  "feedFilterChipBarRenderer": {
+                    "contents": [
+                      {
+                        "chipCloudChipRenderer": {
+                          "text": {
+                            "simpleText": "All"
+                          }
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "text": {
+                            "simpleText": "Music"
+                          }
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "text": {
+                            "simpleText": "Gaming"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "contents": [
+                  {
+                    "richItemRenderer": {
+                      "content": {
+                        "videoRenderer": {
+                          "videoId": "aaaaaaaaaaa",
+                          "title": {
+                            "simpleText": "First long video"
+                          },
+                          "lengthText": {
+                            "simpleText": "12:34"
+                          },
+                          "viewCountText": {
+                            "simpleText": "1,234,567 views"
+                          },
+                          "publishedTimeText": {
+                            "simpleText": "2 days ago"
+                          },
+                          "ownerText": {
+                            "runs": [
+                              {
+                                "text": "Channel One",
+                                "navigationEndpoint": {
+                                  "browseEndpoint": {
+                                    "browseId": "UCone"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "thumbnail": {
+                            "thumbnails": [
+                              {
+                                "url": "https://i.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg",
+                                "width": 480,
+                                "height": 360
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "richItemRenderer": {
+                      "content": {
+                        "videoRenderer": {
+                          "videoId": "sssssssssss",
+                          "title": {
+                            "simpleText": "A short, not a card"
+                          },
+                          "lengthText": {
+                            "simpleText": "0:21"
+                          },
+                          "viewCountText": {
+                            "simpleText": "40,000 views"
+                          },
+                          "publishedTimeText": {
+                            "simpleText": "1 day ago"
+                          },
+                          "ownerText": {
+                            "runs": [
+                              {
+                                "text": "Channel Two",
+                                "navigationEndpoint": {
+                                  "browseEndpoint": {
+                                    "browseId": "UCtwo"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "thumbnail": {
+                            "thumbnails": [
+                              {
+                                "url": "https://i.ytimg.com/vi/sssssssssss/hqdefault.jpg"
+                              }
+                            ]
+                          },
+                          "thumbnailOverlays": [
+                            {
+                              "thumbnailOverlayTimeStatusRenderer": {
+                                "style": "SHORTS",
+                                "text": {
+                                  "simpleText": "0:21"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "richItemRenderer": {
+                      "content": {
+                        "videoRenderer": {
+                          "videoId": "ccccccccccc",
+                          "title": {
+                            "simpleText": "Second long video"
+                          },
+                          "lengthText": {
+                            "simpleText": "8:02"
+                          },
+                          "viewCountText": {
+                            "simpleText": "82,000 views"
+                          },
+                          "publishedTimeText": {
+                            "simpleText": "3 hours ago"
+                          },
+                          "ownerText": {
+                            "runs": [
+                              {
+                                "text": "Channel One",
+                                "navigationEndpoint": {
+                                  "browseEndpoint": {
+                                    "browseId": "UCone"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "thumbnail": {
+                            "thumbnails": [
+                              {
+                                "url": "https://i.ytimg.com/vi/ccccccccccc/hqdefault.jpg"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "richItemRenderer": {
+                      "content": {
+                        "videoRenderer": {
+                          "videoId": "uuuuuuuuuuu",
+                          "title": {
+                            "simpleText": "A premiere that is not playable yet"
+                          },
+                          "viewCountText": {
+                            "simpleText": "1 waiting"
+                          },
+                          "publishedTimeText": {
+                            "simpleText": "Premieres in 2 hours"
+                          },
+                          "ownerText": {
+                            "runs": [
+                              {
+                                "text": "Channel Three",
+                                "navigationEndpoint": {
+                                  "browseEndpoint": {
+                                    "browseId": "UCthree"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "upcomingEventData": {
+                            "startTime": "1799999999"
+                          },
+                          "thumbnail": {
+                            "thumbnails": [
+                              {
+                                "url": "https://i.ytimg.com/vi/uuuuuuuuuuu/hqdefault.jpg"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
