@@ -17,6 +17,12 @@ object Dimensions {
 
     val MoodButtonHeight: Dp = 48.dp
 
+    /** The space a feed reserves above its first band, on top of the content inset. */
+    val FeedTopPadding: Dp = 4.dp
+
+    /** The feed's own side inset; a band inside the feed adds the content padding on top. */
+    val FeedSideInset: Dp = 4.dp
+
     val ContentPaddingHorizontal: Dp = 12.dp
     val ContentPaddingVertical: Dp = 12.dp
     val ItemSpacing: Dp = 12.dp

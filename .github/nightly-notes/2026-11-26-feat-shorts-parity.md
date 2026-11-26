@@ -8,3 +8,4 @@
 - The comments sheet now rests at the height the reference gives it, in full screen and in a split pane, so its top edge, drag handle, title row and close button sit exactly where the reference's do.
 - The music tab heads every shelf with the app's large emphasized title on the same 12dp inset and spacing, and its bar carries four action buttons at the bar's end, so its headings and bar now sit where the reference's do.
 - The music tab now opens with the same filter chip row the reference shows, and each shelf picks the body its contents call for: dense tiles for mixes, square cards for albums and collection pages, and round portraits for artists, on the reference's own spacing.
+- Subscriptions opens on the same Quick access band the reference shows, on its own 12dp inset and 4dp feed margin, with an All filter row under it, so the channel shortcuts, their labels and the chip row sit at the reference's measured positions.

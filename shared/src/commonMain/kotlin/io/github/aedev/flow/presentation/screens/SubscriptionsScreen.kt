@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -63,6 +64,7 @@ import io.github.aedev.flow.resources.action_back
 import io.github.aedev.flow.resources.action_undo
 import io.github.aedev.flow.resources.channels_count
 import io.github.aedev.flow.resources.feed_failed
+import io.github.aedev.flow.resources.library_filter_all
 import io.github.aedev.flow.resources.no_subscriptions_found
 import io.github.aedev.flow.resources.search_subscriptions
 import io.github.aedev.flow.resources.subscriptions_empty_body
@@ -72,7 +74,6 @@ import io.github.aedev.flow.resources.subscriptions_quick_access_title
 import io.github.aedev.flow.resources.subscriptions_search_placeholder
 import io.github.aedev.flow.resources.subscriptions_title
 import io.github.aedev.flow.resources.unsubscribed_from_template
-import io.github.aedev.flow.resources.view_all_button_label
 import io.github.aedev.flow.ui.theme.Dimensions
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
@@ -363,7 +364,13 @@ private fun SubscriptionsGrid(
     LazyVerticalGrid(
         columns = GridCells.Fixed(SUBSCRIPTIONS_COLUMNS),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = GridInset, vertical = GridSpacing),
+        contentPadding =
+            PaddingValues(
+                start = Dimensions.FeedSideInset,
+                end = Dimensions.FeedSideInset,
+                top = Dimensions.FeedTopPadding,
+                bottom = Dimensions.SectionSpacing,
+            ),
         horizontalArrangement = Arrangement.spacedBy(GridSpacing),
         verticalArrangement = Arrangement.spacedBy(GridSpacing),
     ) {
@@ -375,6 +382,7 @@ private fun SubscriptionsGrid(
                     onViewAll = onViewAll,
                 )
                 HorizontalDivider()
+                SubscriptionGroupRow()
             }
         }
         items(feed.videos, key = { video -> video.entry.id }) { video ->
@@ -458,6 +466,32 @@ private fun QuickAccessChannel(
     }
 }
 
+/**
+ * The group filter row under the quick access row: the one chip this device's subscription set
+ * gives it, All, over the feed beneath. The reference also offers a Posts chip and a control that
+ * edits its groups; the port keeps no subscription groups and has no posts feed of its own, so
+ * neither has a source here.
+ */
+@Composable
+private fun SubscriptionGroupRow() {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = Dimensions.ContentPaddingHorizontal,
+                    vertical = Dimensions.DenseTileGap,
+                ),
+        horizontalArrangement = Arrangement.spacedBy(Dimensions.DenseTileGap),
+    ) {
+        FilterChip(
+            selected = true,
+            onClick = {},
+            label = { Text(stringResource(Res.string.library_filter_all)) },
+        )
+    }
+}
+
 /** The last cell of Quick access: a forward mark that opens the channel list. */
 @Composable
 private fun QuickAccessViewAll(onClick: () -> Unit) {
@@ -478,12 +512,12 @@ private fun QuickAccessViewAll(onClick: () -> Unit) {
         ) {
             Icon(
                 imageVector = FlowIcons.ArrowForward,
-                contentDescription = stringResource(Res.string.view_all_button_label),
+                contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Text(
-            text = stringResource(Res.string.view_all_button_label),
+            text = stringResource(Res.string.library_filter_all),
             style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
