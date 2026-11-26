@@ -36,6 +36,14 @@ internal const val COMMENTS_SHEET_HEIGHT_FRACTION = 0.62f
 /** Material's drag handle and the room its row takes at the head of a sheet. */
 internal val CommentsSheetHandleHeight = 52.dp
 
+/**
+ * The head of the reference's Shorts page that its sheet fraction measures from: over its whole
+ * window the reference's sheet comes out at 0.62 of the reel area less this band, measured at
+ * window heights 1340, 1100 and 1600 px and again at 2x density (719, 570, 880 and 673 px), all
+ * inside 1px.
+ */
+internal val CommentsSheetTopChrome = 39.dp
+
 private val SheetStartPadding = 16.dp
 private val SheetTitleGap = 8.dp
 private val SheetHeaderBottomPadding = 6.dp

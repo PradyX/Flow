@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -45,6 +44,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -225,10 +225,20 @@ internal fun ShortsScreen(
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        // The reference measures a sheet against the reel's own area: the screen above the bar,
-        // less the status inset, so the sheet leaves the reel's first rows visible behind it.
-        val statusBarInset = with(LocalDensity.current) { WindowInsets.statusBars.getTop(this).toDp() }
-        val commentsSheetHeight = (maxHeight - statusBarInset) * COMMENTS_SHEET_HEIGHT_FRACTION
+        // The reference fractions its page for the sheet. Over a whole window that page is the reel
+        // area less its own top chrome; in a pane shorter than it is wide it is the whole pane, bar
+        // included. Both were measured against the reference on device, so the sheet rests where
+        // the reference's does in either layout and the reel keeps the rest.
+        val commentsSheetBox =
+            if (maxHeight > maxWidth) {
+                maxHeight - CommentsSheetTopChrome
+            } else {
+                with(LocalDensity.current) {
+                    LocalWindowInfo.current.containerSize.height
+                        .toDp()
+                }
+            }
+        val commentsSheetHeight = commentsSheetBox * COMMENTS_SHEET_HEIGHT_FRACTION
         // The sheet lives inside the reel's layout rather than over it, so it ends at the bar the
         // way the reference's sheet does and leaves the reel and its bar in place.
         BottomSheetScaffold(
