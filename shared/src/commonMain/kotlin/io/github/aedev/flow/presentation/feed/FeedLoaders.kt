@@ -4,6 +4,9 @@ import io.github.aedev.flow.data.model.LiveChatMessage
 import io.github.aedev.flow.data.model.LiveChatMessageType
 import io.github.aedev.flow.data.model.LiveChatSegment
 import io.github.aedev.flow.innertube.YouTube
+import io.github.aedev.flow.innertube.models.AlbumItem
+import io.github.aedev.flow.innertube.models.ArtistItem
+import io.github.aedev.flow.innertube.models.PlaylistItem
 import io.github.aedev.flow.innertube.models.SongItem
 import io.github.aedev.flow.innertube.models.response.GetLiveChatResponse
 import io.github.aedev.flow.innertube.models.response.WatchMetadataResponse
@@ -353,14 +356,39 @@ suspend fun loadLibrary(): Result<LibraryFeed> =
         )
     }
 
-/** One carousel of the music tab: its heading and the cards under it. */
+/**
+ * The body a music shelf takes. It follows what the shelf is made of, not its heading: a shelf of
+ * mixes reads as tiles, a shelf of portraits as portraits, and anything a response supplies as
+ * cards — which is also how a chip's own page draws the list rows it arrives with.
+ */
+enum class MusicSectionShape {
+    /** Dense tiles with a square artwork and two lines, three rows deep, scrolled sideways. */
+    DenseTiles,
+
+    /** Portraits in the artist shape, a centred name under each. */
+    ArtistPortraits,
+
+    /** Square cards, two lines under the artwork. */
+    CollectionCards,
+}
+
+/** One shelf of the music tab: its heading, its entries and the body they are drawn in. */
 data class MusicSection(
     val title: String,
     val entries: List<FeedEntry>,
+    val shape: MusicSectionShape = MusicSectionShape.CollectionCards,
 )
 
-/** The music tab: YouTube Music's own shelves, in the order its response sends them. */
+/** One of the music page's own filter chips; choosing it asks for the page it names. */
+data class MusicChip(
+    val title: String,
+    val browseId: String?,
+    val params: String?,
+)
+
+/** The music tab: YouTube Music's own chips and shelves, in the order its response sends them. */
 data class MusicHomeFeed(
+    val chips: List<MusicChip> = emptyList(),
     val sections: List<MusicSection>,
     val continuation: String? = null,
 ) {
@@ -369,13 +397,19 @@ data class MusicHomeFeed(
 }
 
 /** A response's carousels as shelves, dropping any the parser cannot read rather than showing it empty. */
-internal fun HomePage.toMusicSections(): List<MusicSection> =
-    sections.mapNotNull { section ->
-        section.items
-            .map { it.toMusicEntry() }
-            .takeIf { it.isNotEmpty() }
-            ?.let { entries -> MusicSection(title = section.title, entries = entries) }
-    }
+internal fun HomePage.toMusicSections(): List<MusicSection> = sections.mapNotNull { it.toMusicSection() }
+
+private fun HomePage.Section.toMusicSection(): MusicSection? {
+    val entries = items.map { it.toMusicEntry() }
+    if (entries.isEmpty()) return null
+    val shape =
+        when {
+            items.all { it is ArtistItem } -> MusicSectionShape.ArtistPortraits
+            items.all { it is AlbumItem } || listRows -> MusicSectionShape.CollectionCards
+            else -> MusicSectionShape.DenseTiles
+        }
+    return MusicSection(title = title, entries = entries, shape = shape)
+}
 
 /** The headings the app opens its music page with, in this order. */
 internal val MUSIC_LEAD_SECTIONS = listOf("New releases", "Trending community playlists", "Artists for you")
@@ -391,6 +425,7 @@ private suspend fun seededMusicShelf(
     heading: String,
     query: String,
     filter: YouTube.SearchFilter,
+    shape: MusicSectionShape,
 ): MusicSection? =
     YouTube
         .search(query, filter)
@@ -398,7 +433,7 @@ private suspend fun seededMusicShelf(
         ?.items
         ?.map { it.toMusicEntry() }
         ?.takeIf { it.isNotEmpty() }
-        ?.let { MusicSection(title = heading, entries = it) }
+        ?.let { MusicSection(title = heading, entries = it, shape = shape) }
 
 /**
  * The music tab: YouTube Music's home shelves in the app's order — New releases, then Trending
@@ -407,11 +442,25 @@ private suspend fun seededMusicShelf(
  * the music search, which is how the app sources those two itself; anything else is left out
  * rather than invented.
  */
-suspend fun loadMusicHome(continuation: String? = null): Result<MusicHomeFeed> =
+suspend fun loadMusicHome(
+    chip: MusicChip? = null,
+    continuation: String? = null,
+): Result<MusicHomeFeed> =
     runCatching {
         if (continuation != null) {
             val page = YouTube.home(continuation = continuation).getOrThrow()
             return@runCatching MusicHomeFeed(sections = page.toMusicSections(), continuation = page.continuation)
+        }
+
+        // A chosen chip is a browse of the page it names, so the shelves under it are that page's.
+        val chipBrowseId = chip?.browseId
+        if (chipBrowseId != null) {
+            val page = YouTube.home(browseId = chipBrowseId, params = chip.params).getOrThrow()
+            return@runCatching MusicHomeFeed(
+                chips = page.chips.orEmpty().mapNotNull { it.toMusicChip() },
+                sections = page.toMusicSections(),
+                continuation = page.continuation,
+            )
         }
 
         val page = YouTube.home().getOrThrow()
@@ -431,13 +480,26 @@ suspend fun loadMusicHome(continuation: String? = null): Result<MusicHomeFeed> =
                             "Artists for you" -> YouTube.SearchFilter.FILTER_ARTIST
                             else -> YouTube.SearchFilter.FILTER_COMMUNITY_PLAYLIST
                         },
+                    shape =
+                        when (heading) {
+                            "New releases" -> MusicSectionShape.CollectionCards
+                            "Artists for you" -> MusicSectionShape.ArtistPortraits
+                            else -> MusicSectionShape.DenseTiles
+                        },
                 )
             }
         MusicHomeFeed(
+            chips = page.chips.orEmpty().mapNotNull { it.toMusicChip() },
             sections = musicSectionsInAppOrder(sections + seeded),
             continuation = page.continuation,
         )
     }
+
+/** A browse chip as the page renders it; one that names no page is a label, so it is dropped. */
+internal fun HomePage.Chip.toMusicChip(): MusicChip? {
+    val browseId = endpoint?.browseId ?: return null
+    return MusicChip(title = title, browseId = browseId, params = endpoint.params)
+}
 
 /**
  * A channel from its landing response, then the first page of its Videos tab. The landing response

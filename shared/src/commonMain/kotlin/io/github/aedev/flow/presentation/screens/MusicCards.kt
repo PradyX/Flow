@@ -16,14 +16,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.aedev.flow.presentation.feed.FeedEntry
 import io.github.aedev.flow.presentation.ui.MediaArtwork
+import io.github.aedev.flow.ui.theme.Dimensions
 
-internal val MusicCardWidth = 140.dp
+internal val MusicCardWidth = Dimensions.GridThumbnailHeightBig
 internal val MusicCardSpacing = 12.dp
 internal val MusicSectionSpacing = 20.dp
-private val MusicCardTextSpacing = 8.dp
+private val MusicCardTextSpacing = 6.dp
 private val InlineExplicitBadgeSize = 14.dp
 
 /** What a music card opens: its playlist page, its song, or its artist; null when it opens none. */
@@ -46,12 +48,13 @@ internal fun MusicCard(
     onOpenPlaylist: (playlistId: String, title: String, thumbnailUrl: String?) -> Unit,
     onOpenVideo: (videoId: String, title: String, thumbnailUrl: String?) -> Unit,
     onOpenArtist: (artistId: String, name: String, thumbnailUrl: String?) -> Unit,
+    width: Dp = MusicCardWidth,
 ) {
     val open = musicEntryClick(entry, onOpenPlaylist, onOpenVideo, onOpenArtist)
     Column(
         modifier =
             Modifier
-                .width(MusicCardWidth)
+                .width(width)
                 .clickable(enabled = open != null) { open?.invoke() },
     ) {
         MediaArtwork(
@@ -65,7 +68,7 @@ internal fun MusicCard(
             text = entry.title,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         entry.subtitle?.takeIf { it.isNotBlank() }?.let { line ->
@@ -73,7 +76,7 @@ internal fun MusicCard(
                 text = line,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }

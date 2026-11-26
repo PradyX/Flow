@@ -22,6 +22,12 @@ object Dimensions {
     val ItemSpacing: Dp = 12.dp
     val SectionSpacing: Dp = 16.dp
 
+    /** The gap between the dense tiles of a music grid, in both directions. */
+    val DenseTileGap: Dp = 8.dp
+
+    /** The portrait an artist card carries. */
+    val ArtistPortraitSize: Dp = 84.dp
+
     val PlayerHorizontalPadding: Dp = 32.dp
 }
 

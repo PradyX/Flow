@@ -48,6 +48,11 @@ data class HomePage(
         val thumbnail: String?,
         val endpoint: BrowseEndpoint?,
         val items: List<YTItem>,
+        /**
+         * True when the shelf's own contents are list rows rather than cards, which is how a chip's
+         * page lays its tracks out. A shelf's body follows this, not its heading.
+         */
+        val listRows: Boolean = false,
     ) {
         companion object {
             /**
@@ -93,6 +98,11 @@ data class HomePage(
                                 }
                             }.ifEmpty {
                                 return null
+                            },
+                    listRows =
+                        chipPage &&
+                            renderer.contents.any { content ->
+                                content.musicResponsiveListItemRenderer != null || content.musicMultiRowListItemRenderer != null
                             },
                 )
             }

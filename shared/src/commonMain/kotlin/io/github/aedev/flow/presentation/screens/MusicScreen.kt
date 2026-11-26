@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -17,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.aedev.flow.presentation.feed.LoadState
+import io.github.aedev.flow.presentation.feed.MusicChip
 import io.github.aedev.flow.presentation.feed.MusicFeedState
 import io.github.aedev.flow.presentation.feed.MusicHomeFeed
 import io.github.aedev.flow.presentation.feed.loadMusicHome
@@ -48,14 +50,15 @@ internal fun MusicScreen(
     onOpenProfiles: () -> Unit,
 ) {
     var attempt by remember { mutableIntStateOf(0) }
+    var selectedChip by remember { mutableStateOf<MusicChip?>(null) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(attempt) {
-        // A returning screen keeps the shelves it already has; only a retry refetches.
-        if (attempt == 0 && state.feed is LoadState.Ready) return@LaunchedEffect
+    LaunchedEffect(attempt, selectedChip) {
+        // A returning screen keeps the shelves it already has; a retry or a chip choice refetches.
+        if (attempt == 0 && selectedChip == null && state.feed is LoadState.Ready) return@LaunchedEffect
         state.feed = LoadState.Loading
         state.feed =
-            loadMusicHome().fold(
+            loadMusicHome(chip = selectedChip).fold(
                 onSuccess = { LoadState.Ready(it) },
                 onFailure = { LoadState.Failed(it.message.orEmpty()) },
             )
@@ -105,6 +108,8 @@ internal fun MusicScreen(
             is LoadState.Ready -> {
                 MusicShelves(
                     feed = current.value,
+                    selectedChip = selectedChip,
+                    onChipSelected = { selectedChip = it },
                     loadingMore = state.loadingMore,
                     onLoadMore = {
                         val ready = state.feed as? LoadState.Ready ?: return@MusicShelves
@@ -112,7 +117,7 @@ internal fun MusicScreen(
                         if (state.loadingMore) return@MusicShelves
                         state.loadingMore = true
                         scope.launch {
-                            loadMusicHome(continuation = token).onSuccess { next ->
+                            loadMusicHome(chip = selectedChip, continuation = token).onSuccess { next ->
                                 val shown = state.feed as? LoadState.Ready ?: return@launch
                                 state.feed = LoadState.Ready(shown.value.more(next))
                             }
@@ -131,6 +136,8 @@ internal fun MusicScreen(
 @Composable
 private fun MusicShelves(
     feed: MusicHomeFeed,
+    selectedChip: MusicChip?,
+    onChipSelected: (MusicChip?) -> Unit,
     loadingMore: Boolean,
     onLoadMore: () -> Unit,
     onOpenPlaylist: (playlistId: String, title: String, thumbnailUrl: String?) -> Unit,
@@ -139,6 +146,9 @@ private fun MusicShelves(
 ) {
     MusicSectionList(
         sections = feed.sections,
+        chips = feed.chips,
+        selectedChip = selectedChip,
+        onChipSelected = onChipSelected,
         continuation = feed.continuation,
         loadingMore = loadingMore,
         onLoadMore = onLoadMore,
