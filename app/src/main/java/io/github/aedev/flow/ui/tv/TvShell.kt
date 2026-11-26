@@ -38,6 +38,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavGraph
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -45,6 +46,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import io.github.aedev.flow.data.model.Video
 import io.github.aedev.flow.data.music.model.MusicTrack
+import io.github.aedev.flow.player.queue.QueuePageSource
 import io.github.aedev.flow.ui.TabScrollEventBus
 import io.github.aedev.flow.ui.components.layout.FlowBottomInsets
 import io.github.aedev.flow.ui.components.layout.LocalFlowBottomInsets
@@ -52,9 +54,7 @@ import io.github.aedev.flow.ui.components.settings.SettingsTarget
 import io.github.aedev.flow.ui.components.shared.MediaMiniBarDefaults
 import io.github.aedev.flow.ui.screens.home.HomeViewModel
 import io.github.aedev.flow.ui.screens.music.MusicPlayerViewModel
-import io.github.aedev.flow.ui.screens.music.MusicViewModel
-import io.github.aedev.flow.ui.screens.search.SearchViewModel
-import io.github.aedev.flow.ui.screens.subscriptions.SubscriptionsViewModel
+import io.github.aedev.flow.ui.screens.playon.LocalPlayOn
 import io.github.aedev.flow.ui.tv.components.TvNavRail
 import io.github.aedev.flow.ui.tv.components.TvRailProfile
 import io.github.aedev.flow.ui.tv.components.railFocusDirection
@@ -77,12 +77,9 @@ fun TvShell(
     navigation: TvNavigation,
     navController: NavHostController,
     homeViewModel: HomeViewModel,
-    musicViewModel: MusicViewModel,
     musicPlayerViewModel: MusicPlayerViewModel,
-    subscriptionsViewModel: SubscriptionsViewModel,
-    searchViewModel: SearchViewModel,
     onPlayVideo: (Video) -> Unit,
-    onPlayPlaylist: (videos: List<Video>, startIndex: Int, title: String, shuffle: Boolean) -> Unit,
+    onPlayPlaylist: (videos: List<Video>, startIndex: Int, title: String, shuffle: Boolean, more: QueuePageSource?) -> Unit,
     onPlayVideoId: (String) -> Unit,
     activeMusicTrack: MusicTrack?,
     onExpandMusic: () -> Unit,
@@ -102,6 +99,8 @@ fun TvShell(
     }
     val currentRoot = currentRoute?.takeIf { it in rootRoutes } ?: lastRoot
     val miniPlayerShown = rememberUpdatedState(activeMusicTrack != null)
+    val playOn = LocalPlayOn.current
+    val elsewhere = playOn?.elsewhere?.collectAsStateWithLifecycle()?.value
     // Phone pages pad their ends by these insets, so they scroll clear of the floating mini player here too.
     val bottomInsets =
         remember(dimens) {
@@ -219,10 +218,7 @@ fun TvShell(
                     navController = navController,
                     startRoute = navigation.startTab.route,
                     homeViewModel = homeViewModel,
-                    musicViewModel = musicViewModel,
                     musicPlayerViewModel = musicPlayerViewModel,
-                    subscriptionsViewModel = subscriptionsViewModel,
-                    searchViewModel = searchViewModel,
                     onPlayVideo = onPlayVideo,
                     onPlayPlaylist = onPlayPlaylist,
                     onPlayVideoId = onPlayVideoId,
@@ -287,6 +283,9 @@ fun TvShell(
             onOtherEntry = { contentFocusRequester.requestFocus().also { taken -> railHoldsFocusForPage = !taken } },
             nowPlayingTitle = activeMusicTrack?.title,
             onOpenNowPlaying = onExpandMusic,
+            playingOnDevice = elsewhere?.name,
+            playingOnTitle = elsewhere?.now?.title.orEmpty(),
+            onOpenPlayOn = { playOn?.open?.value = true },
             profile = { expanded -> TvRailProfile(expanded, onOpenSettings = { navController.navigate(TvRoutes.settingsPage(it)) }) },
             modifier =
                 Modifier

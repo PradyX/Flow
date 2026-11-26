@@ -9,6 +9,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.upstream.DefaultAllocator
 import io.github.aedev.flow.data.local.BufferDurations
 import io.github.aedev.flow.data.local.BufferProfile
+import io.github.aedev.flow.platform.memory.DeviceTier
 import io.github.aedev.flow.player.config.PlayerConfig
 
 /**
@@ -25,6 +26,8 @@ object LoadControlFactory {
     private const val BYTES_PER_MB = 1024L * 1024L
     private const val SKIP_TAIL_START_MS = 250
     private const val SKIP_TAIL_SPARE_MS = 3_000
+    private const val MIN_NEXT_VIDEO_PRELOAD_MS = 2_000L
+    private const val NEXT_VIDEO_PRELOAD_MARGIN_MS = 500L
     private val StockMaxBufferMs = BufferProfile.entries.maxOf { it.maxBuffer }
 
     /**
@@ -71,6 +74,16 @@ object LoadControlFactory {
         )
     }
 
+    /**
+     * How much of the next queued video to buffer while the current one plays: enough to start it
+     * without waiting, i.e. its start gate plus a margin, and never less than YouTube's 2 s. None while
+     * Android's Data Saver is on.
+     */
+    fun nextVideoPreloadUs(
+        bufferForPlaybackMs: Int,
+        savingData: Boolean,
+    ): Long = if (savingData) 0L else maxOf(MIN_NEXT_VIDEO_PRELOAD_MS, bufferForPlaybackMs + NEXT_VIDEO_PRELOAD_MARGIN_MS) * 1_000L
+
     /** What the main video player may buffer on this device, before the user's durations are applied. */
     internal data class VideoBudget(
         val maxSafeMinMs: Int,
@@ -90,7 +103,7 @@ object LoadControlFactory {
         isLowRamDevice: Boolean,
         requestedMaxMs: Int,
     ): VideoBudget {
-        val isLowMemoryDevice = isLowRamDevice || memoryClassMb <= 256
+        val isLowMemoryDevice = DeviceTier.isSmall(memoryClassMb, isLowRamDevice)
         val isConstrainedHeap = isLowMemoryDevice || memoryClassMb <= 384
         val tierBytes =
             when {
@@ -99,8 +112,10 @@ object LoadControlFactory {
                 else -> PlayerConfig.MAIN_TARGET_BUFFER_BYTES
             }
         val wantsLongBuffer = !isLowRamDevice && requestedMaxMs > StockMaxBufferMs
+        val longBufferDivisor =
+            if (isLowMemoryDevice) PlayerConfig.SMALL_HEAP_LONG_BUFFER_HEAP_DIVISOR else PlayerConfig.LONG_BUFFER_HEAP_DIVISOR
         val longBufferBytes =
-            (memoryClassMb.toLong() * BYTES_PER_MB / PlayerConfig.LONG_BUFFER_HEAP_DIVISOR)
+            (memoryClassMb.toLong() * BYTES_PER_MB / longBufferDivisor)
                 .coerceAtMost(PlayerConfig.MAX_LONG_BUFFER_BYTES.toLong())
                 .toInt()
         return VideoBudget(
@@ -128,19 +143,19 @@ object LoadControlFactory {
         )
 
     /**
-     * Music service: audio-only, so a long window costs little memory and a low playback threshold
-     * gets the first note out quickly. No back buffer, and no byte cap — the duration window is the
-     * only budget it needs.
+     * Music: a low playback threshold gets the first note out quickly. With [wholeSong] the song loads
+     * to its end and what has played is kept, both inside one byte cap, so a seek either way stays in
+     * memory (#2167). Without it, the lean 30 s window with no back buffer.
      */
-    fun forMusic(): DefaultLoadControl =
+    fun forMusic(wholeSong: Boolean = false): DefaultLoadControl =
         build(
             minMs = PlayerConfig.MUSIC_MIN_BUFFER_MS,
-            maxMs = PlayerConfig.MUSIC_MAX_BUFFER_MS,
+            maxMs = if (wholeSong) PlayerConfig.MUSIC_WHOLE_SONG_BUFFER_MS else PlayerConfig.MUSIC_MAX_BUFFER_MS,
             playbackMs = PlayerConfig.MUSIC_BUFFER_FOR_PLAYBACK_MS,
             rebufferMs = PlayerConfig.MUSIC_BUFFER_FOR_REBUFFER_MS,
-            backBufferMs = 0,
-            retainBackBufferFromKeyframe = false,
-            targetBufferBytes = C.LENGTH_UNSET,
+            backBufferMs = if (wholeSong) PlayerConfig.MUSIC_BACK_BUFFER_MS else 0,
+            retainBackBufferFromKeyframe = wholeSong,
+            targetBufferBytes = if (wholeSong) PlayerConfig.MUSIC_TARGET_BUFFER_BYTES else C.LENGTH_UNSET,
         )
 
     /** A skipped song's tail plays for moments, so it starts on little audio and loads no more than it will play. */
@@ -176,7 +191,7 @@ object LoadControlFactory {
 
         return DefaultLoadControl
             .Builder()
-            .setAllocator(DefaultAllocator(true, PlayerConfig.ALLOCATOR_BUFFER_SIZE))
+            .setAllocator(PlayerBuffers.track(DefaultAllocator(true, PlayerConfig.ALLOCATOR_BUFFER_SIZE)))
             .setBufferDurationsMs(resolvedMin, resolvedMax, playbackMs, rebufferMs)
             .setBackBuffer(backBufferMs, retainBackBufferFromKeyframe)
             .setPrioritizeTimeOverSizeThresholds(true)

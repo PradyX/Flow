@@ -20,6 +20,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -86,8 +87,14 @@ class PlaybackLoadResolver
                     return
                 }
 
+                // The watch page reads /next for every streamed video. Asked beside /player instead of
+                // after it, it is still the one request: the page's own reads join it or find it cached.
+                scope.launch(networkDispatcher) { repository.watchNextResponse(videoId) }
+
                 val innerTubeDeferred =
-                    scope.async(networkDispatcher) { extractInnerTube(videoId, forceSabr = request.escalateToSabr) }
+                    scope.async(networkDispatcher) {
+                        extractInnerTube(videoId, forceSabr = request.escalateToSabr, freshStreams = request.freshStreams)
+                    }
 
                 // Startup-critical disk reads, resolved in parallel with stream extraction so the
                 // playback-preparation path below never blocks on DataStore/DB.
@@ -213,19 +220,38 @@ class PlaybackLoadResolver
             }
         }
 
-        private fun extractionFailureCause(videoId: String): Throwable? =
-            InnerTubeVideoStreamExtractor.blockOf(videoId)?.let(::PlaybackBlockedException)
+        private fun extractionFailureCause(videoId: String): Throwable? {
+            val block = InnerTubeVideoStreamExtractor.blockOf(videoId)
+            val refusal = InnerTubeVideoStreamExtractor.refusalOf(videoId)
+            return when {
+                block != null -> PlaybackBlockedException(block, refusal)
+                InnerTubeVideoStreamExtractor.isGone(videoId) || refusal != null -> VideoUnavailableException(videoId, refusal)
+                else -> null
+            }
+        }
 
         private suspend fun extractInnerTube(
             videoId: String,
             forceSabr: Boolean,
+            freshStreams: Boolean,
         ): InnerTubeVideoStreamExtractor.VideoExtractionResult? =
             try {
-                if (forceSabr) {
-                    InnerTubeVideoStreamExtractor.extract(videoId, forceSabr = true)
-                } else {
-                    withTimeoutOrNull(INNERTUBE_TIMEOUT_MS) {
-                        InnerTubeVideoStreamExtractor.extract(videoId, forceSabr = false)
+                when {
+                    forceSabr -> {
+                        InnerTubeVideoStreamExtractor.extract(videoId, forceSabr = true)
+                    }
+
+                    freshStreams -> {
+                        InnerTubeVideoStreamExtractor.forgetReusable(videoId)
+                        withTimeoutOrNull(INNERTUBE_TIMEOUT_MS) { InnerTubeVideoStreamExtractor.extractForPage(videoId) }
+                    }
+
+                    else -> {
+                        // Both offers are spent by this first load, so a reload after a refusal extracts fresh.
+                        val tapped = PlaybackPrefetcher.take(videoId)
+                        (InnerTubeVideoStreamExtractor.takePromoted(videoId) ?: tapped)
+                            ?.also { Log.d(TAG, "Load of $videoId took a finished extraction; no new client ladder") }
+                            ?: withTimeoutOrNull(INNERTUBE_TIMEOUT_MS) { InnerTubeVideoStreamExtractor.extractForPage(videoId) }
                     }
                 }
             } catch (e: CancellationException) {

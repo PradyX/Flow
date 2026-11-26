@@ -41,9 +41,12 @@ object PlayerConfig {
     /** Min buffer cap when Android reports a small app heap. */
     const val LOW_MEMORY_MAX_SAFE_MAIN_MIN_BUFFER_MS = 8_000
 
+    /** App heaps below this get the smallest video buffer; 256 MB is what most phones report. */
+    const val SMALL_HEAP_MB = 192
+
     const val MAIN_TARGET_BUFFER_BYTES = 32 * 1024 * 1024
 
-    /** Smaller target buffer budgets for devices with 256-384 MB app heaps. */
+    /** Target buffer budgets for heaps under 192 MB (or low-RAM devices) and for 192-384 MB heaps. */
     const val LOW_MEMORY_MAIN_TARGET_BUFFER_BYTES = 4 * 1024 * 1024
     const val MID_MEMORY_MAIN_TARGET_BUFFER_BYTES = 12 * 1024 * 1024
 
@@ -52,6 +55,9 @@ object PlayerConfig {
      * Media3's allocator keeps buffered media in heap arrays: 1/5 of a 256 MB heap is about 51 MB.
      */
     const val LONG_BUFFER_HEAP_DIVISOR = 5
+
+    /** On a heap under [SMALL_HEAP_MB] a long buffer gets a tenth, about 13 MB of a 128 MB TV's heap (#2204). */
+    const val SMALL_HEAP_LONG_BUFFER_HEAP_DIVISOR = 10
     const val MAX_LONG_BUFFER_BYTES = 128 * 1024 * 1024
 
     /** Explicit target buffer budget per shorts player in the pooled shorts stack. */
@@ -68,17 +74,22 @@ object PlayerConfig {
     const val SHORTS_BUFFER_FOR_REBUFFER_MS = 750
     const val SHORTS_BACK_BUFFER_MS = 2_000
 
-    /** Music buffer window. Audio-only, so a long window is cheap and a low start threshold is safe. */
+    /**
+     * Music buffer window. [MUSIC_MAX_BUFFER_MS] is the lean window (crossfade tails, small heaps
+     * and Data Saver); otherwise a song loads whole and what has played stays, so a seek is in memory (#2167).
+     */
     const val MUSIC_MIN_BUFFER_MS = 2_500
     const val MUSIC_MAX_BUFFER_MS = 30_000
     const val MUSIC_BUFFER_FOR_PLAYBACK_MS = 1_000
     const val MUSIC_BUFFER_FOR_REBUFFER_MS = 1_500
+    const val MUSIC_WHOLE_SONG_BUFFER_MS = 10 * 60 * 1000
+    const val MUSIC_BACK_BUFFER_MS = 10 * 60 * 1000
+
+    /** Bounds a long mix and the music player's video mode, which would otherwise size the cap for video. */
+    const val MUSIC_TARGET_BUFFER_BYTES = 24 * 1024 * 1024
 
     /** Preferred delay from the true live edge. Keeps YouTube live playback stable. */
     const val LIVE_EDGE_GAP_MS = 10_000L
-
-    /** Maximum DVR window requested for live streams where the manifest supports it. */
-    const val LIVE_DVR_MAX_OFFSET_MS = 2 * 60 * 60 * 1000L
 
     // ===== Bandwidth Thresholds =====
 
@@ -115,29 +126,6 @@ object PlayerConfig {
     /** Buffering count threshold before quality downgrade */
     const val BUFFERING_COUNT_THRESHOLD = 3
 
-    // ===== Network Configuration =====
-
-    /** Maximum concurrent requests per host for adaptive streaming */
-    const val MAX_REQUESTS_PER_HOST = 20
-
-    /** Maximum total concurrent requests */
-    const val MAX_REQUESTS = 40
-
-    /** Connection pool size */
-    const val CONNECTION_POOL_SIZE = 15
-
-    /** Connection pool keep-alive duration in minutes */
-    const val CONNECTION_POOL_KEEP_ALIVE_MINUTES = 5L
-
-    /** Connect timeout in seconds */
-    const val CONNECT_TIMEOUT_SECONDS = 15L
-
-    /** Read timeout in seconds */
-    const val READ_TIMEOUT_SECONDS = 30L
-
-    /** Write timeout in seconds */
-    const val WRITE_TIMEOUT_SECONDS = 15L
-
     // ===== Position Tracking =====
 
     /** Position tracker polling interval in milliseconds */
@@ -148,11 +136,6 @@ object PlayerConfig {
 
     /** Stuck detection threshold (number of checks with no position change) */
     const val STUCK_DETECTION_THRESHOLD = 2
-
-    // ===== Surface Configuration =====
-
-    /** Default surface ready timeout in milliseconds */
-    const val DEFAULT_SURFACE_TIMEOUT_MS = 500L
 
     // ===== Error Recovery =====
 

@@ -24,7 +24,14 @@ data class PlayerResponse(
     val attestation: Attestation? = null,
     /** Kept raw: only the pre-roll's timing is read (see `PrerollWait`), and none of it may fail the parse. */
     val adPlacements: JsonArray? = null,
+    val heartbeatParams: HeartbeatParams? = null,
 ) {
+    /** How often YouTube's player reports back while a stream is live or waiting to start. */
+    @Serializable
+    data class HeartbeatParams(
+        val intervalMilliseconds: String? = null,
+    )
+
     /**
      * The attestation demand YouTube attaches to a player response, as
      * `a=6&b=<nonce>&c=<issued>&d=<clientId>&e=<videoId>&hh=<binding>`.
@@ -49,7 +56,14 @@ data class PlayerResponse(
     @Serializable
     data class Storyboards(
         val playerStoryboardSpecRenderer: PlayerStoryboardSpecRenderer? = null,
+        val playerLiveStoryboardSpecRenderer: PlayerLiveStoryboardSpecRenderer? = null,
     ) {
+        /** A live stream's storyboard: `url#width#height#columns#rows`, its sheet number in `$M`. */
+        @Serializable
+        data class PlayerLiveStoryboardSpecRenderer(
+            val spec: String? = null,
+        )
+
         @Serializable
         data class PlayerStoryboardSpecRenderer(
             val spec: String? = null,
@@ -70,7 +84,16 @@ data class PlayerResponse(
             val uploadDate: String? = null,
             val externalChannelId: String? = null,
             val canonicalUrl: String? = null,
-        )
+            val liveBroadcastDetails: LiveBroadcastDetails? = null,
+        ) {
+            /** A stream's real start and end, as ISO-8601 date-times with an offset. */
+            @Serializable
+            data class LiveBroadcastDetails(
+                val isLiveNow: Boolean? = null,
+                val startTimestamp: String? = null,
+                val endTimestamp: String? = null,
+            )
+        }
     }
 
     @Serializable
@@ -81,15 +104,33 @@ data class PlayerResponse(
         data class PlayerCaptionsTracklistRenderer(
             val captionTracks: List<CaptionTrack>? = null,
             val translationLanguages: List<TranslationLanguage>? = null,
+            val audioTracks: List<AudioTrack>? = null,
+            val defaultAudioTrackIndex: Int? = null,
         )
 
         @Serializable
         data class CaptionTrack(
             val baseUrl: String? = null,
             val name: Text? = null,
+            /** Unique per track: `.en`, `a.en` for auto-generated, `.en.<id>` for a named creator track. */
+            val vssId: String? = null,
             val languageCode: String? = null,
             val kind: String? = null, // "asr" = auto-generated
             val isTranslatable: Boolean? = null,
+            val trackName: String? = null,
+        )
+
+        /**
+         * Which caption tracks go with one audio track, as indices into [PlayerCaptionsTracklistRenderer.captionTracks],
+         * and whether captions start on while it plays.
+         */
+        @Serializable
+        data class AudioTrack(
+            val captionTrackIndices: List<Int>? = null,
+            val defaultCaptionTrackIndex: Int? = null,
+            val hasDefaultTrack: Boolean? = null,
+            val audioTrackId: String? = null,
+            val captionsInitialState: String? = null,
         )
 
         @Serializable
@@ -117,6 +158,8 @@ data class PlayerResponse(
         val reason: String?,
         val liveStreamability: LiveStreamability? = null,
         val errorScreen: ErrorScreen? = null,
+        /** YouTube's longer explanation, e.g. "This is a private video. Please sign in to verify that you may see it." */
+        val messages: List<String>? = null,
     ) {
         /** The error screen's second line, which says when the refusal is about the viewer's country. */
         val subreason: String? get() = errorScreen?.playerErrorMessageRenderer?.subreason?.text
@@ -139,6 +182,10 @@ data class PlayerResponse(
             data class LiveStreamabilityRenderer(
                 val videoId: String? = null,
                 val offlineSlate: OfflineSlate? = null,
+                /** Which broadcast of the video this is; a new one means the stream was restarted. */
+                val broadcastId: String? = null,
+                /** How long YouTube's player waits before asking again while the stream has not started. */
+                val pollDelayMs: String? = null,
             ) {
                 @Serializable
                 data class OfflineSlate(
@@ -157,7 +204,14 @@ data class PlayerResponse(
     data class PlayerConfig(
         val audioConfig: AudioConfig? = null,
         val mediaCommonConfig: MediaCommonConfig? = null,
+        val livePlayerConfig: LivePlayerConfig? = null,
     ) {
+        /** How far behind the newest segment a live stream starts playing. */
+        @Serializable
+        data class LivePlayerConfig(
+            val liveReadaheadSeconds: Double? = null,
+        )
+
         @Serializable
         data class AudioConfig(
             val loudnessDb: Double?,
@@ -225,6 +279,9 @@ data class PlayerResponse(
             val initRange: Range? = null,
             val indexRange: Range? = null,
             val colorInfo: ColorInfo? = null,
+            // Live formats only: the length of one segment and how far back the stream can be played.
+            val targetDurationSec: Double? = null,
+            val maxDvrDurationSec: Long? = null,
         ) {
             /** A live stream's auto-caption track (`text/mp4`), listed with the formats but neither audio nor video. */
             val isText: Boolean
@@ -311,6 +368,9 @@ data class PlayerResponse(
         val isLiveDvrEnabled: Boolean? = null,
         val isPostLiveDvr: Boolean? = null,
         val keywords: List<String>? = null,
+        val latencyClass: String? = null,
+        /** False when the creator hides the video's likes. */
+        val allowRatings: Boolean? = null,
     )
 
     @Serializable

@@ -9,10 +9,13 @@ package io.github.aedev.flow.ui.components.shared
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Error
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -35,14 +38,17 @@ private val StateIconContainerSize = 96.dp
 private val StateIconSize = 44.dp
 
 /**
- * Failure state for any surface, with a single retry affordance.
+ * Failure state for any surface, with a retry affordance and an optional [secondaryAction] beside it.
+ * A null [onRetry] leaves the retry out, for a failure that retrying cannot change.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun FlowErrorState(
     error: String,
-    onRetry: () -> Unit,
+    onRetry: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    icon: ImageVector = Icons.Outlined.Error,
+    secondaryAction: (@Composable () -> Unit)? = null,
 ) {
     Box(
         modifier = modifier.fillMaxSize(),
@@ -53,21 +59,63 @@ fun FlowErrorState(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            FlowStateIcon(icon = Icons.Outlined.Error, tint = MaterialTheme.colorScheme.error)
+            FlowStateIcon(icon = icon, tint = MaterialTheme.colorScheme.error)
             Text(
                 text = error,
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            Button(
-                onClick = onRetry,
-                shapes = ButtonDefaults.shapes(),
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(stringResource(R.string.action_retry))
+                if (onRetry != null) {
+                    Button(
+                        onClick = onRetry,
+                        shapes = ButtonDefaults.shapes(),
+                    ) {
+                        Text(stringResource(R.string.action_retry))
+                    }
+                }
+                secondaryAction?.invoke()
             }
         }
     }
+}
+
+/**
+ * A page YouTube refused with [message] in its own words, such as a deleted playlist. Retrying
+ * cannot bring it back, so the only action is [onBack].
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun FlowGoneState(
+    message: String,
+    icon: ImageVector,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FlowErrorState(
+        error = message,
+        onRetry = null,
+        modifier = modifier,
+        icon = icon,
+        secondaryAction = {
+            Button(
+                onClick = onBack,
+                shapes = ButtonDefaults.shapes(),
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = null,
+                    modifier = Modifier.size(ButtonDefaults.IconSize),
+                )
+                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                Text(stringResource(R.string.back))
+            }
+        },
+    )
 }
 
 /**

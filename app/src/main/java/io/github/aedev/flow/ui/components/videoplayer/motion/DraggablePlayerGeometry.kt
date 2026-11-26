@@ -1,10 +1,10 @@
 package io.github.aedev.flow.ui.components.videoplayer.motion
 
+import androidx.compose.ui.hapticfeedback.HapticFeedback
 import io.github.aedev.flow.player.sanitizeDisplayAspectRatio
 import io.github.aedev.flow.ui.components.videoplayer.MiniPlayerCorner
 import io.github.aedev.flow.ui.components.videoplayer.SheetOpenOrigin
 
-private const val WIDE_MODE_SCALE_THRESHOLD = 1.5f
 private const val SIXTEEN_NINE = 16f / 9f
 
 /** How far taller than 16:9 a video may be and still get the 16:9 box, for renditions like 1920x1088. */
@@ -59,6 +59,22 @@ internal fun miniBoxWidthFor(
 ): Float = if (clampedAspect >= 1f) envelopeSide else envelopeSide * clampedAspect
 
 /**
+ * A mini player resting in a bottom corner on the shrunk navigation bar's side moves in by
+ * [clearance] from that edge, so it sits beside the bar instead of over it.
+ */
+internal fun clearDockedBar(
+    x: Float,
+    corner: MiniPlayerCorner,
+    width: Float,
+    screenWidth: Float,
+    clearance: Float,
+    barOnLeft: Boolean,
+): Float {
+    if (clearance <= 0f || corner.isTop || corner.isLeft != barOnLeft) return x
+    return if (barOnLeft) maxOf(x, clearance) else minOf(x, screenWidth - width - clearance)
+}
+
+/**
  * @param isLargeWindow the window can host one of the detail layouts, so the mini player is sized
  *   from the window instead of the user's scale and is free to rest anywhere along the edge.
  * @param isTwoPaneWindow the body puts the detail pane beside the video, so the expanded video
@@ -85,6 +101,9 @@ internal fun computeDraggablePlayerGeometry(
     isShrinkingToCorner: Boolean,
     cachedTargetX: Float,
     offsetXFallback: () -> Float,
+    dockedBottomNavPad: Float? = null,
+    dockedSideClearance: Float = 0f,
+    dockedOnLeft: Boolean = true,
 ): DraggablePlayerGeometry {
     // The size preference applies at every window size. It used to be overwritten with a constant
     // on anything large, which happened to equal the "small" option — so on a tablet the setting did
@@ -99,7 +118,7 @@ internal fun computeDraggablePlayerGeometry(
     val clampedAspect = playerBoxAspectRatio(videoAspectRatio)
     val miniWidth = miniBoxWidthFor(baseMiniWidth * currentSizeScale, clampedAspect).coerceAtMost(maxWideWidth)
     val miniHeight = miniWidth / clampedAspect
-    val isWideMode = currentSizeScale > WIDE_MODE_SCALE_THRESHOLD
+    val isWideMode = currentSizeScale >= maxWideWidth / baseMiniWidth.coerceAtLeast(1f) * WIDE_SIZE_SHARE
 
     val expandedVideoWidth = if (isTwoPaneWindow) screenWidth - detailPaneWidth else screenWidth
     val baseVideoHeight = expandedVideoWidth * (9f / 16f)
@@ -109,19 +128,30 @@ internal fun computeDraggablePlayerGeometry(
     val minX = margin + startInset
     val maxX = (screenWidth - miniWidth - margin).coerceAtLeast(minX)
     val minY = statusBarHeight + topBarPad + margin
-    val maxY = (screenHeight - miniHeight - bottomNavPad - margin).coerceAtLeast(minY)
+    val wideBottomNavPad = bottomNavPad
+    val restingBottomNavPad = dockedBottomNavPad ?: bottomNavPad
+    val maxY = (screenHeight - miniHeight - restingBottomNavPad - margin).coerceAtLeast(minY)
 
-    val normalMiniWidth = miniBoxWidthFor(baseMiniWidth, clampedAspect)
+    // A pinched size rests in its corner like the size setting does; only the widest size centres.
+    val normalMiniWidth = miniBoxWidthFor(baseMiniWidth * if (isWideMode) 1f else currentSizeScale, clampedAspect)
     val normalMiniHeight = normalMiniWidth / clampedAspect
     val normalMaxX = (screenWidth - normalMiniWidth - margin).coerceAtLeast(margin)
-    val normalMaxY = (screenHeight - normalMiniHeight - bottomNavPad - margin).coerceAtLeast(minY)
-    val normalTargetX = cornerTargetX(corner, minX = minX, maxX = normalMaxX)
+    val normalMaxY = (screenHeight - normalMiniHeight - restingBottomNavPad - margin).coerceAtLeast(minY)
+    val normalTargetX =
+        clearDockedBar(
+            x = cornerTargetX(corner, minX = minX, maxX = normalMaxX),
+            corner = corner,
+            width = normalMiniWidth,
+            screenWidth = screenWidth,
+            clearance = dockedSideClearance,
+            barOnLeft = dockedOnLeft,
+        )
     val normalTargetY = cornerTargetY(corner, minY = minY, maxY = normalMaxY)
 
     val stableWideWidth = miniBoxWidthFor(maxWideWidth, clampedAspect)
     val stablePhoneCenteredX = ((screenWidth - stableWideWidth) / 2f).coerceAtLeast(margin)
     val stableWideHeight = stableWideWidth / clampedAspect
-    val stableWideMaxY = (screenHeight - stableWideHeight - bottomNavPad - margin).coerceAtLeast(minY)
+    val stableWideMaxY = (screenHeight - stableWideHeight - wideBottomNavPad - margin).coerceAtLeast(minY)
     val stableWideTargetY = cornerTargetY(corner, minY = minY, maxY = stableWideMaxY)
 
     val targetMiniX =
@@ -138,7 +168,7 @@ internal fun computeDraggablePlayerGeometry(
         screenHeight = screenHeight,
         statusBarHeight = statusBarHeight,
         margin = margin,
-        bottomNavPad = bottomNavPad,
+        bottomNavPad = restingBottomNavPad,
         clampedAspect = clampedAspect,
         baseMiniWidth = baseMiniWidth,
         maxWideWidth = maxWideWidth,
@@ -175,16 +205,27 @@ internal fun tallVideoMaxHeight(
     baseVideoHeight: Float,
 ): Float = (screenHeight - statusBarHeight - navigationBarHeight - minPageHeight).coerceAtLeast(baseVideoHeight)
 
+/** The mini player's on-screen share of the expanded video's width at [sizeScale], read live in the draw phase. */
+internal fun DraggablePlayerGeometry.liveVisualMiniScale(sizeScale: Float): Float =
+    (miniBoxWidth(baseMiniWidth * sizeScale).coerceAtMost(maxWideWidth) / expandedVideoWidth.coerceAtLeast(1f))
+        .coerceIn(0.01f, 1f)
+
 internal fun DraggablePlayerGestureMetrics.update(
     geometry: DraggablePlayerGeometry,
     isLargeWindow: Boolean,
     isLandscape: Boolean,
     isFullscreen: Boolean,
     tapToExpand: Boolean,
+    thresholds: PlayerGestureThresholds,
+    minSizeScale: Float,
+    haptics: HapticFeedback,
     onFullscreenGesture: (() -> Unit)?,
     onCollapseGesture: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
+    this.thresholds = thresholds
+    this.minSizeScale = minSizeScale
+    this.haptics = haptics
     minX = geometry.minX
     maxX = geometry.maxX
     minY = geometry.minY

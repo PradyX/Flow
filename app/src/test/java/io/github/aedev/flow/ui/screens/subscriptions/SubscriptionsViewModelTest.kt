@@ -6,7 +6,7 @@ import io.github.aedev.flow.data.local.AppDatabase
 import io.github.aedev.flow.data.local.ChannelSubscription
 import io.github.aedev.flow.data.local.PlayerPreferences
 import io.github.aedev.flow.data.local.SubscriptionRepository
-import io.github.aedev.flow.data.local.ViewHistory
+import io.github.aedev.flow.data.local.WatchProgressStore
 import io.github.aedev.flow.data.local.dao.SubscriptionGroupDao
 import io.github.aedev.flow.data.local.entity.SubscriptionGroupEntity
 import io.github.aedev.flow.data.model.Video
@@ -46,7 +46,7 @@ class SubscriptionsViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
 
     private val subscriptionRepository: SubscriptionRepository = mockk(relaxed = true)
-    private val viewHistory: ViewHistory = mockk(relaxed = true)
+    private val watchProgress: WatchProgressStore = mockk(relaxed = true)
     private val subscriptionFeedRepository: SubscriptionFeedRepository = mockk(relaxed = true)
     private val database: AppDatabase = mockk(relaxed = true)
     private val playerPreferences: PlayerPreferences = mockk(relaxed = true)
@@ -71,7 +71,7 @@ class SubscriptionsViewModelTest {
         coEvery { playerPreferences.subscriptionLastRefreshTime } returns flowOf(0L)
         coEvery { playerPreferences.subscriptionLastRefreshedCount } returns flowOf(0)
         coEvery { playerPreferences.subscriptionShowCheckedVideoCount } returns flowOf(true)
-        coEvery { viewHistory.getVideoWatchProgress() } returns flowOf(emptyList())
+        coEvery { watchProgress.videoProgress } returns flowOf(emptyList())
         coEvery { playerPreferences.hideWatchedVideosFromSubscriptions } returns flowOf(false)
         coEvery { playerPreferences.hideWatchedShorts } returns flowOf(true)
         coEvery { playerPreferences.watchedThreshold } returns flowOf(mockk(relaxed = true))
@@ -82,6 +82,10 @@ class SubscriptionsViewModelTest {
         coEvery { subscriptionRepository.getAllSubscriptions() } returns flowOf(emptyList())
         coEvery { subscriptionFeedRepository.observeFeed(any()) } returns flowOf(emptyList())
         coEvery { subscriptionFeedRepository.planRefresh(any(), any()) } returns SubscriptionRefreshPlan.NOTHING_TO_DO
+        coEvery { subscriptionFeedRepository.planAllRefresh(any()) } returns SubscriptionRefreshPlan.NOTHING_TO_DO
+        coEvery { playerPreferences.subscriptionHiddenGroups } returns flowOf(emptySet())
+        coEvery { playerPreferences.subscriptionGroupsOutOfAll } returns flowOf(emptySet())
+        coEvery { playerPreferences.subscriptionAllChip } returns flowOf(true)
         coEvery { neuroEngine.feedExclusions(any()) } returns FeedExclusions.NONE
 
         viewModel =
@@ -90,7 +94,7 @@ class SubscriptionsViewModelTest {
                 subscriptionFeedRepository = subscriptionFeedRepository,
                 playerPreferences = playerPreferences,
                 subscriptionGroupDao = subscriptionGroupDao,
-                subscriptionWatchedVideos = SubscriptionWatchedVideos(viewHistory, playerPreferences, database),
+                subscriptionWatchedVideos = SubscriptionWatchedVideos(watchProgress, playerPreferences, database),
                 neuroEngine = neuroEngine,
                 backupCoordinator = mockk(relaxed = true),
                 watchHistoryDao = mockk(relaxed = true),
@@ -362,14 +366,37 @@ class SubscriptionsViewModelTest {
                     }
                 }
             }
-            coVerify(exactly = 0) { subscriptionFeedRepository.planRefresh(true, null) }
+            coVerify(exactly = 0) { subscriptionFeedRepository.planAllRefresh(any()) }
+        }
+
+    @Test
+    fun `on All a pull plans the All chip's channels, not every subscription (1387)`() =
+        runTest {
+            coEvery { subscriptionGroupDao.getAllGroups() } returns
+                flowOf(listOf(SubscriptionGroupEntity(name = "Gym", channelIds = "a,b")))
+            coEvery { playerPreferences.subscriptionHiddenGroups } returns flowOf(setOf("Gym"))
+            viewModel.ensureStarted()
+            awaitState { it.groups.isNotEmpty() && it.hiddenGroups == setOf("Gym") }
+
+            viewModel.refreshFeed()
+
+            withContext(Dispatchers.Default) {
+                withTimeout(VERIFY_TIMEOUT_MS) {
+                    while (true) {
+                        val asked = runCatching { coVerify { subscriptionFeedRepository.planAllRefresh(true) } }
+                        if (asked.isSuccess) break
+                        delay(20)
+                    }
+                }
+            }
+            coVerify(exactly = 0) { subscriptionFeedRepository.planRefresh(true, any()) }
         }
 
     private fun stallRefresh(subscriptions: MutableStateFlow<List<ChannelSubscription>>): CompletableDeferred<Unit> {
         val started = CompletableDeferred<Unit>()
         val plan = SubscriptionRefreshPlan(subscriptions.value.map { it.channelId }, isFullRefresh = true)
         coEvery { subscriptionRepository.getAllSubscriptions() } returns subscriptions
-        coEvery { subscriptionFeedRepository.planRefresh(false, null) } returns plan
+        coEvery { subscriptionFeedRepository.planAllRefresh(false) } returns plan
         coEvery { subscriptionFeedRepository.refresh(plan) } returns
             flow {
                 started.complete(Unit)
@@ -388,8 +415,8 @@ class SubscriptionsViewModelTest {
         /**
          * The ViewModel launches on [io.github.aedev.flow.utils.PerformanceDispatcher] rather than
          * on an injected dispatcher, so the test scheduler cannot join those coroutines. Verify
-         * with a timeout instead of racing them.
+         * with a timeout instead of racing them, long enough for a busy CI runner.
          */
-        const val VERIFY_TIMEOUT_MS = 2_000L
+        const val VERIFY_TIMEOUT_MS = 10_000L
     }
 }

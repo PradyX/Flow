@@ -4,7 +4,10 @@ import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.database.ContentObserver
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.OrientationEventListener
 import android.view.WindowManager
@@ -30,8 +33,10 @@ internal fun FullscreenEffect(
     suppressFullscreenRequest: Boolean = false,
     isPortrait: Boolean = false,
     isLargeWindow: Boolean = false,
+    isSheetCollapsed: Boolean = false,
     hideSystemBars: Boolean,
 ) {
+    val currentIsSheetCollapsed by rememberUpdatedState(isSheetCollapsed)
     var resumeTrigger by remember { mutableIntStateOf(0) }
     val currentIsLargeWindow by rememberUpdatedState(isLargeWindow)
     var forcePortraitLock by remember { mutableStateOf(false) }
@@ -91,15 +96,26 @@ internal fun FullscreenEffect(
                 // Only an actual fullscreen exit may pin: this effect also re-runs on every resume
                 // and on the first composition, where pinning locks an app that was merely
                 // backgrounded in landscape into portrait until it is force-restarted (#841).
-                when {
-                    leavingFullscreen && cfgLandscape && autoRotateOn && !currentIsLargeWindow -> {
+                when (
+                    orientationAfterFullscreen(
+                        leavingFullscreen = leavingFullscreen,
+                        isLandscape = cfgLandscape,
+                        autoRotateOn = autoRotateOn,
+                        isLargeWindow = currentIsLargeWindow,
+                        isSheetCollapsed = currentIsSheetCollapsed,
+                        portraitLockHeld = forcePortraitLock,
+                    )
+                ) {
+                    FullscreenExitOrientation.PIN_PORTRAIT -> {
                         act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                         forcePortraitLock = true
                     }
 
-                    !forcePortraitLock -> {
+                    FullscreenExitOrientation.RELEASE -> {
                         act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                     }
+
+                    FullscreenExitOrientation.KEEP -> {}
                 }
 
                 // Reset screen brightness to default when exiting fullscreen
@@ -107,6 +123,16 @@ internal fun FullscreenEffect(
                 layoutParams.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
                 act.window.attributes = layoutParams
             }
+        }
+    }
+
+    // The pin only keeps the expanded player from turning straight back to fullscreen; the mini
+    // player and the app have landscape layouts of their own (#2316).
+    LaunchedEffect(isSheetCollapsed) {
+        val act = activity ?: return@LaunchedEffect
+        if (isSheetCollapsed && forcePortraitLock) {
+            forcePortraitLock = false
+            act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
 
@@ -145,6 +171,27 @@ internal fun FullscreenEffect(
         }
     }
 }
+
+internal enum class FullscreenExitOrientation { PIN_PORTRAIT, RELEASE, KEEP }
+
+/**
+ * What leaving fullscreen does to the window's orientation. Leaving it sideways on a phone holds
+ * portrait until the phone is turned upright, or the expanded player would go straight back to
+ * fullscreen; a collapse to the mini player leaves nothing expanded, so it follows the sensor (#2316).
+ */
+internal fun orientationAfterFullscreen(
+    leavingFullscreen: Boolean,
+    isLandscape: Boolean,
+    autoRotateOn: Boolean,
+    isLargeWindow: Boolean,
+    isSheetCollapsed: Boolean,
+    portraitLockHeld: Boolean,
+): FullscreenExitOrientation =
+    when {
+        leavingFullscreen && isLandscape && autoRotateOn && !isLargeWindow && !isSheetCollapsed -> FullscreenExitOrientation.PIN_PORTRAIT
+        portraitLockHeld -> FullscreenExitOrientation.KEEP
+        else -> FullscreenExitOrientation.RELEASE
+    }
 
 @Composable
 internal fun KeepScreenOnEffect(
@@ -205,18 +252,11 @@ internal fun OrientationListenerEffect(
     val listener =
         remember(context) {
             object : OrientationEventListener(context) {
+                @Volatile var autoRotateOn = true
+
                 override fun onOrientationChanged(orientation: Int) {
                     if (orientation == ORIENTATION_UNKNOWN) return
-
-                    val autoRotateOn = {
-                        try {
-                            Settings.System.getInt(context.contentResolver, Settings.System.ACCELEROMETER_ROTATION) == 1
-                        } catch (e: Exception) {
-                            true
-                        }
-                    }
-
-                    if (!followsTilt(currentIgnoreRotationLock, autoRotateOn)) return
+                    if (!followsTilt(currentIgnoreRotationLock) { autoRotateOn }) return
 
                     val newOrientation = heldOrientation(orientation, physicalOrientation)
 
@@ -227,11 +267,32 @@ internal fun OrientationListenerEffect(
             }
         }
 
-    // Sensor-driven fullscreen changes are only meaningful while the user is looking at the
-    // player, and an accelerometer left registered in the background costs battery for nothing.
-    LifecycleResumeEffect(listener, lifecycleOwner) {
+    // Tilt only turns the expanded player, so the accelerometer is held only while it is expanded
+    // and in front: behind the mini player or in the background it would cost battery for nothing.
+    // The auto-rotate setting is read once here and then followed, not read on every sensor event.
+    LifecycleResumeEffect(listener, lifecycleOwner, isExpanded) {
+        if (!isExpanded) return@LifecycleResumeEffect onPauseOrDispose { }
+        val resolver = context.contentResolver
+        val readAutoRotate = {
+            try {
+                Settings.System.getInt(resolver, Settings.System.ACCELEROMETER_ROTATION) == 1
+            } catch (e: Settings.SettingNotFoundException) {
+                true
+            }
+        }
+        val observer =
+            object : ContentObserver(Handler(Looper.getMainLooper())) {
+                override fun onChange(selfChange: Boolean) {
+                    listener.autoRotateOn = readAutoRotate()
+                }
+            }
+        listener.autoRotateOn = readAutoRotate()
+        resolver.registerContentObserver(Settings.System.getUriFor(Settings.System.ACCELEROMETER_ROTATION), false, observer)
         listener.enable()
-        onPauseOrDispose { listener.disable() }
+        onPauseOrDispose {
+            listener.disable()
+            resolver.unregisterContentObserver(observer)
+        }
     }
 
     LaunchedEffect(physicalOrientation, isExpanded) {

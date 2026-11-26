@@ -11,8 +11,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
@@ -20,11 +18,12 @@ import io.github.aedev.flow.data.model.Video
 import io.github.aedev.flow.player.EnhancedPlayerManager
 import io.github.aedev.flow.player.GlobalPlayerState
 import io.github.aedev.flow.player.dlna.DlnaCastManager
+import io.github.aedev.flow.player.pipStopOf
 import io.github.aedev.flow.ui.components.layout.flowWindowAdaptiveInfo
 import io.github.aedev.flow.ui.components.videoplayer.DraggablePlayerLayout
+import io.github.aedev.flow.ui.components.videoplayer.MiniPlayerDock
 import io.github.aedev.flow.ui.components.videoplayer.PlayerDraggableState
 import io.github.aedev.flow.ui.components.videoplayer.PlayerSheetValue
-import io.github.aedev.flow.ui.components.videoplayer.isImmersivePlayer
 import io.github.aedev.flow.ui.screens.player.effects.*
 import io.github.aedev.flow.ui.screens.player.stage.*
 import io.github.aedev.flow.ui.screens.player.state.*
@@ -50,6 +49,7 @@ import kotlinx.coroutines.launch
  * @param onClose Called when the player is closed
  * @param onNavigateToChannel Called when navigating to a channel
  * @param onNavigateToShorts Called when navigating to shorts
+ * @param onNavigateToPlaylist Called with a playlist or Mix id tapped in the related lane
  */
 @UnstableApi
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
@@ -60,6 +60,7 @@ fun VideoPlayerHost(
     playerSheetState: PlayerDraggableState,
     bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     startInset: androidx.compose.ui.unit.Dp = 0.dp,
+    miniDock: MiniPlayerDock? = null,
     miniPlayerScale: Float = 0.45f,
     miniPlayerShowSkipControls: Boolean = false,
     miniPlayerShowNextPrevControls: Boolean = false,
@@ -67,6 +68,7 @@ fun VideoPlayerHost(
     onMinimize: () -> Unit,
     onNavigateToChannel: (String) -> Unit,
     onNavigateToShorts: (String) -> Unit,
+    onNavigateToPlaylist: (String) -> Unit,
 ) {
     if (video == null || !isVisible) return
 
@@ -93,7 +95,7 @@ fun VideoPlayerHost(
     val rememberSubtitleLanguage: (String) -> Unit = { language ->
         scope.launch { prefs.preferences.setPreferredSubtitleLanguage(language) }
     }
-    val isCommentsAvailable = prefs.commentsEnabled && playerUiState.hlsUrl.isNullOrEmpty()
+    val isCommentsAvailable = prefs.commentsEnabled && !playerUiState.isLive
 
     PlayerVolumeEffects(
         videoId = video.id,
@@ -135,7 +137,8 @@ fun VideoPlayerHost(
             coversPlayer = playerSheetState.isScrolledAway,
         )
     val effectiveVideoAspectRatio = mediaSheetGeometry.effectiveVideoAspectRatio
-    var expandedPlayerBottom by remember { mutableStateOf(0.dp) }
+    val videoBand = belowVideoBand(prefs.idleProgressBar, isTwoPaneWindow)
+    var expandedPlayerBottomPx by remember { mutableStateOf<() -> Float>({ 0f }) }
     val pipForcedFullscreen = remember { mutableStateOf(false) }
 
     PlayerZoomEffects(
@@ -162,11 +165,6 @@ fun VideoPlayerHost(
     )
 
     val progressProvider = remember(screenState) { { screenState.playbackFraction() } }
-    PlayerSheetCollapseSyncEffects(
-        playerSheetState = playerSheetState,
-        screenState = screenState,
-    )
-
     val sponsorSkipBottomInset = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()
 
     val updateBrightnessLevel =
@@ -260,7 +258,7 @@ fun VideoPlayerHost(
         onHideControls = { screenState.showControls = false },
     )
 
-    GestureOverlayAutoHideEffect(screenState)
+    GestureOverlayAutoHideEffect(screenState, seekStepSeconds = prefs.doubleTapSeekSeconds)
 
     SetupPipEffects(
         context = context,
@@ -270,6 +268,7 @@ fun VideoPlayerHost(
         videoAspectRatio = videoAspectRatio,
         pipPreferences = pipPreferences,
         hasNext = playerState.hasNext || playerUiState.relatedVideos.isNotEmpty(),
+        stop = pipStopOf(ended = playerState.hasEnded, failed = playerUiState.error != null && !playerUiState.isUpcoming),
         playerViewModel = playerViewModel,
     )
 
@@ -283,131 +282,26 @@ fun VideoPlayerHost(
             windowIsLandscape = isLandscape,
             rotationHonoured = !isInPipWindow && !isLargeWindow && !context.orientationRequestIgnored(config),
         )
-    FullscreenEffect(
-        isFullscreen = screenState.isFullscreen,
-        activity = activity,
-        videoAspectRatio = effectiveVideoAspectRatio,
-        lifecycleOwner = lifecycleOwner,
-        fullscreenBrightnessLevel = {
-            if (prefs.rememberBrightnessEnabled) screenState.brightnessLevel else null
-        },
-        suppressFullscreenRequest = pipForcedFullscreen.value,
-        isPortrait = screenState.isFullscreenPortrait,
-        isLargeWindow = isLargeWindow,
-        hideSystemBars =
-            isImmersivePlayer(
-                isExpanded = playerSheetState.currentValue == PlayerSheetValue.Expanded,
-                isFullscreen = fullscreenShown,
-                isLandscape = isLandscape,
-                isLargeWindow = isLargeWindow,
-            ),
-    )
-
-    OrientationResetEffect(activity)
-
-    WatchProgressSaveEffect(
+    VideoPlayerSessionEffects(
         video = video,
-        isPlaying = playerState.playWhenReady,
-        currentPosition = { screenState.currentPosition },
-        duration = { screenState.duration },
-        uiState = playerUiState,
-        viewModel = playerViewModel,
-    )
-
-    if (!playerUiState.isRestoredSession) {
-        PlayerFreshSessionEffects(
-            videoId = video.id,
-            context = context,
-            screenState = screenState,
-            uiState = playerUiState,
-            viewModel = playerViewModel,
-        )
-    }
-
-    val globalCurrentVideo by GlobalPlayerState.currentVideo.collectAsStateWithLifecycle()
-    GlobalVideoSyncEffect(
-        currentVideoId = globalCurrentVideo?.id,
-        currentVideo = { globalCurrentVideo },
-        uiState = playerUiState,
-        commentsEnabled = prefs.commentsEnabled,
-        expandedBodyVisible = expandedSurfacesMounted,
-        viewModel = playerViewModel,
-    )
-
-    SubscriptionAndLikeEffect(
-        videoId = video.id,
-        uiState = playerUiState,
-        viewModel = playerViewModel,
-    )
-
-    // Short video prompt
-    ShortVideoPromptEffect(
-        videoDuration = video.duration,
-        screenState = screenState,
-        isInQueue = playerState.queueSize > 1,
-        disableShortsPlayer = prefs.disableShortsPlayer,
-        showShortsPlayerPrompt = prefs.showShortsPlayerPrompt,
-    )
-
-    SponsorSkipEffect(context, showSkipNotice = prefs.sbSkipNoticeEnabled, onSkipped = playerViewModel::onSponsorSegmentSkipped)
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { playerViewModel.checkpointWatchSession() }
-
-    SubtitleLoadErrorEffect(
-        context = context,
-        subtitles = playerState.availableSubtitles,
-        rememberLanguage = rememberSubtitleLanguage,
-    )
-
-    OrientationListenerEffect(
-        context = context,
-        isExpanded = playerSheetState.currentValue == PlayerSheetValue.Expanded,
-        isFullscreen = screenState.isFullscreen,
-        videoAspectRatio = effectiveVideoAspectRatio,
-        isPortraitFullscreen = screenState.isFullscreenPortrait,
-        ignoreRotationLock =
-            prefs.tiltFullscreenRotationLocked && !isLargeWindow && !context.orientationRequestIgnored(config),
-        onEnterFullscreen = { screenState.isFullscreen = true },
-        onExitFullscreen = {
-            screenState.isFullscreen = false
-            screenState.isFullscreenPortrait = false
-        },
-    )
-
-    KeepScreenOnEffect(
-        isPlaying = playerState.playWhenReady && !playerState.hasEnded,
         activity = activity,
         lifecycleOwner = lifecycleOwner,
-    )
-
-    UpcomingVideoRefreshEffect(
-        videoId = video.id,
-        isUpcoming = playerUiState.isUpcoming,
-        upcomingReleaseTimeMs = playerUiState.upcomingReleaseTimeMs,
-        viewModel = playerViewModel,
-    )
-
-    PlayerEndAndPipEffects(
-        playerState = playerState,
         playerSheetState = playerSheetState,
         screenState = screenState,
-        isInPipMode = localIsInPipMode,
-        isEnteringPip = isEnteringPip,
+        playerState = playerState,
+        playerUiState = playerUiState,
+        playerViewModel = playerViewModel,
+        prefs = prefs,
         isLandscape = isLandscape,
+        isLargeWindow = isLargeWindow,
+        fullscreenShown = fullscreenShown,
+        effectiveVideoAspectRatio = effectiveVideoAspectRatio,
+        localIsInPipMode = localIsInPipMode,
+        isEnteringPip = isEnteringPip,
         pipForcedFullscreen = pipForcedFullscreen,
+        expandedSurfacesMounted = expandedSurfacesMounted,
+        rememberSubtitleLanguage = rememberSubtitleLanguage,
     )
-
-    val uiStateAtDispose by rememberUpdatedState(playerUiState)
-    DisposableEffect(video.id) {
-        onDispose {
-            saveWatchProgress(
-                viewModel = playerViewModel,
-                video = video,
-                uiState = uiStateAtDispose,
-                position = screenState.currentPosition,
-                duration = screenState.duration,
-            )
-        }
-    }
 
     // ===== UI =====
     val floatingSponsorSkipBottomPadding =
@@ -443,7 +337,9 @@ fun VideoPlayerHost(
                 isFullscreen = screenState.isFullscreen,
                 fullScreenHeightPx = constraints.maxHeight.toFloat(),
                 playerWidthPx = constraints.maxWidth.toFloat(),
-                expandedPlayerBottom = expandedPlayerBottom,
+                expandedPlayerBottomPx = expandedPlayerBottomPx,
+                sheetShown = screenState.activeSheet != PlayerSheet.None,
+                belowVideoBand = videoBand,
                 fallbackScreenHeight = config.screenHeightDp.dp,
                 maxWidth = maxWidth,
                 maxHeight = maxHeight,
@@ -474,6 +370,7 @@ fun VideoPlayerHost(
                 },
             videoAspectRatio = effectiveVideoAspectRatio,
             expandedPlayerHeightFractionOverride = mediaSheetGeometry.playerHeightFractionOverride,
+            belowVideoBand = videoBand,
             scrollAwayEnabled = prefs.playerScrollAwayEnabled,
             contentKey = video.id,
             bottomPadding = bottomPadding,
@@ -482,6 +379,7 @@ fun VideoPlayerHost(
             isTwoPaneWindow = isTwoPaneWindow,
             detailPaneWidth = detailPaneWidth,
             startInset = startInset,
+            miniDock = miniDock,
             tapToExpand = true,
             statusBarGlow = { PlayerAmbientStatusBar(stageSession, it) },
             onDismiss = onClose,
@@ -501,14 +399,13 @@ fun VideoPlayerHost(
                 screenState.isFullscreenPortrait = true
                 screenState.isFullscreen = true
             },
-            onExpandedPlayerBottomChanged = { bottom ->
-                expandedPlayerBottom = bottom
-            },
+            onExpandedPlayerBottomChanged = { bottom -> expandedPlayerBottomPx = bottom },
             modifier =
                 Modifier
                     .align(Alignment.CenterStart)
                     .width(sidePanelState.playerWidth)
-                    .fillMaxHeight(),
+                    .fillMaxHeight()
+                    .then(sidePanelState.playerSlide(videoAspectRatio)),
             videoContent = { modifier ->
                 VideoStage(
                     modifier = modifier,
@@ -518,6 +415,7 @@ fun VideoPlayerHost(
                     expandedSurfacesMounted = expandedSurfacesMounted,
                     expandedSurfacesPlaced = expandedSurfacesPlaced,
                     videoAspectRatio = videoAspectRatio,
+                    croppedByPanel = mediaSheetGeometry.cropsVideo,
                     canGoPrevious = canGoPrevious,
                     isCommentsAvailable = isCommentsAvailable,
                     canUseFullscreenSidePanel = canUseFullscreenSidePanel,
@@ -545,6 +443,7 @@ fun VideoPlayerHost(
                     onClose = onClose,
                     onNavigateToChannel = onNavigateToChannel,
                     onNavigateToShorts = onNavigateToShorts,
+                    onNavigateToPlaylist = onNavigateToPlaylist,
                 )
             },
             miniControls = { _ ->
@@ -562,7 +461,7 @@ fun VideoPlayerHost(
             SponsorSkipLayer(
                 session = stageSession,
                 sponsorSegments = sponsorSegments,
-                expandedPlayerBottom = expandedPlayerBottom,
+                expandedPlayerBottomPx = expandedPlayerBottomPx,
                 playerWidth = sidePanelState.playerWidth,
                 expandedSurfacesPlaced = expandedSurfacesPlaced,
                 style = prefs.sbSkipButtonStyle,

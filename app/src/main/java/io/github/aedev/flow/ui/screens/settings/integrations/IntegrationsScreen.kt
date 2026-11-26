@@ -44,11 +44,14 @@ internal fun IntegrationsScreen(
     val segments by viewModel.segments.collectAsStateWithLifecycle()
     val skipButtonStyle by viewModel.skipButtonStyle.collectAsStateWithLifecycle()
     val deArrow by viewModel.deArrow.collectAsStateWithLifecycle()
+    val deArrowRandomFrame by viewModel.deArrowRandomFrame.collectAsStateWithLifecycle()
+    val deArrowThumbnailsOnly by viewModel.deArrowThumbnailsOnly.collectAsStateWithLifecycle()
     val discordState by viewModel.discordState.collectAsStateWithLifecycle()
     val aiListBlock by viewModel.aiListBlock.collectAsStateWithLifecycle()
     val aiListWarn by viewModel.aiListWarn.collectAsStateWithLifecycle()
     val aiListStatus by viewModel.aiListStatus.collectAsStateWithLifecycle()
-    val aiListStatusText = aiListStatusText(isOn = aiListBlock || aiListWarn, status = aiListStatus)
+    val aiMusic by viewModel.aiMusic.collectAsStateWithLifecycle()
+    val aiListStatusText = aiListStatusText(isOn = aiListBlock || aiListWarn || aiMusic, status = aiListStatus)
     val aiListStatusTitle = stringResource(R.string.ai_list_status_title)
     val aiListSource by viewModel.aiListSource.collectAsStateWithLifecycle()
     val aiReport by viewModel.aiReport.collectAsStateWithLifecycle()
@@ -91,13 +94,26 @@ internal fun IntegrationsScreen(
         }
         group(key = "integrations.dearrow.group", header = R.string.player_settings_dearrow) {
             switch(IntegrationsIndex.deArrow, viewModel.deArrow, viewModel::setDeArrow, icon = Icons.Outlined.AutoFixHigh)
-            switch(IntegrationsIndex.deArrowRandomFrame, viewModel.deArrowRandomFrame, viewModel::setDeArrowRandomFrame, enabled = deArrow)
+            // With thumbnails only, a frame is the only fallback left, so the row reads on; the stored value is kept.
+            switch(
+                IntegrationsIndex.deArrowRandomFrame,
+                checked = deArrowRandomFrame || deArrowThumbnailsOnly,
+                onCheckedChange = viewModel::setDeArrowRandomFrame,
+                enabled = deArrow && !deArrowThumbnailsOnly,
+            )
+            switch(
+                IntegrationsIndex.deArrowThumbnailsOnly,
+                viewModel.deArrowThumbnailsOnly,
+                viewModel::setDeArrowThumbnailsOnly,
+                enabled = deArrow,
+            )
             switch(IntegrationsIndex.deArrowBadge, viewModel.deArrowBadge, viewModel::setDeArrowBadge, enabled = deArrow)
         }
         aiListSection(
             viewModel = viewModel,
             statusTitle = aiListStatusTitle,
             statusText = aiListStatusText,
+            musicOn = aiMusic,
             sourceLabel = aiListSourceLabel,
             reportName = aiReportNameLabel,
             reportEnabled = aiReport,

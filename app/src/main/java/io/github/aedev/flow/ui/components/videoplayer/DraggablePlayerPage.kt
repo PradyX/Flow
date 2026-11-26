@@ -15,7 +15,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.offset
 import io.github.aedev.flow.ui.components.videoplayer.motion.BODY_CONTENT_MAX_EXPAND_FRACTION
-import io.github.aedev.flow.ui.components.videoplayer.motion.BODY_SLIDE_PX
+import io.github.aedev.flow.ui.components.videoplayer.motion.BodySlideDistance
 import io.github.aedev.flow.ui.components.videoplayer.motion.OpenOriginRect
 import io.github.aedev.flow.ui.components.videoplayer.motion.RoundRectClipShape
 import io.github.aedev.flow.ui.components.videoplayer.motion.openBodyAlpha
@@ -33,6 +33,7 @@ internal fun DraggablePlayerPage(
     hidden: Boolean,
     isTwoPaneWindow: Boolean,
     statusBarHeight: Float,
+    belowVideoBandPx: Float,
     screenWidth: Float,
     screenHeight: Float,
     videoHeightProvider: () -> Float,
@@ -60,11 +61,11 @@ internal fun DraggablePlayerPage(
             if (isTwoPaneWindow) videoHeightProvider else ({ 0f })
         }
     val bodyPaddingTopProvider =
-        remember(isTwoPaneWindow, statusBarHeight, videoHeightProvider) {
+        remember(isTwoPaneWindow, statusBarHeight, belowVideoBandPx, videoHeightProvider) {
             if (isTwoPaneWindow) {
                 ({ statusBarHeight })
             } else {
-                ({ videoHeightProvider() + statusBarHeight })
+                ({ videoHeightProvider() + statusBarHeight + belowVideoBandPx })
             }
         }
     // How much of a scroll-away page, measured to the full window, still hangs below its bottom edge.
@@ -97,7 +98,7 @@ internal fun DraggablePlayerPage(
                                 if (hidden || fraction > 0.999f) {
                                     placeable.height.toFloat()
                                 } else {
-                                    fraction * BODY_SLIDE_PX + portraitFsFraction() * portraitFsTravel()
+                                    fraction * BodySlideDistance.toPx() + portraitFsFraction() * portraitFsTravel()
                                 }
                             placeable.place(0, topPad - state.scrollAwayPx.roundToInt() + slide.roundToInt())
                         }
@@ -112,7 +113,7 @@ internal fun DraggablePlayerPage(
                             val fraction = state.expandFraction.value
                             val bodyTop =
                                 bodyPaddingTopProvider().roundToInt() - state.scrollAwayPx.roundToInt() +
-                                    (fraction * BODY_SLIDE_PX).roundToInt()
+                                    (fraction * BodySlideDistance.toPx()).roundToInt()
                             shape =
                                 RoundRectClipShape(
                                     openGroundRect(origin, fraction, screenWidth, screenHeight)

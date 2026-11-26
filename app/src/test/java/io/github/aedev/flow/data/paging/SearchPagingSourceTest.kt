@@ -12,6 +12,7 @@ import io.github.aedev.flow.data.local.UploadDate
 import io.github.aedev.flow.data.local.WatchState
 import io.github.aedev.flow.data.recommendation.FeedExclusions
 import io.github.aedev.flow.innertube.pages.SearchFixture
+import io.github.aedev.flow.innertube.pages.renderer.CommunityPost
 import io.github.aedev.flow.innertube.pages.renderer.FeedShelfStyle
 import io.github.aedev.flow.innertube.pages.renderer.videoOrNull
 import io.github.aedev.flow.innertube.pages.search.SearchHeader
@@ -26,8 +27,10 @@ import org.junit.Test
 import java.util.concurrent.Executors
 
 class SearchPagingSourceTest {
+    /** [uniqueTokens] numbers each page's token, so a fixture served twice does not read as a repeated token. */
     private class RecordingLoader(
         private val pages: List<String>,
+        private val uniqueTokens: Boolean = false,
     ) : SearchPageLoader {
         val calls = mutableListOf<Triple<String, String?, String?>>()
         var failNext = false
@@ -42,7 +45,8 @@ class SearchPagingSourceTest {
                 failNext = false
                 throw IllegalStateException("boom")
             }
-            SearchFixture(pages[(calls.size - 1).coerceAtMost(pages.lastIndex)]).toSearchResultsPage()
+            val page = SearchFixture(pages[(calls.size - 1).coerceAtMost(pages.lastIndex)]).toSearchResultsPage()
+            if (uniqueTokens) page.copy(continuation = page.continuation?.let { "$it#${calls.size}" }) else page
         }
     }
 
@@ -98,6 +102,23 @@ class SearchPagingSourceTest {
             assertThat(loader.calls[0].second).isEqualTo("EgIQAQ%3D%3D")
             assertThat(loader.calls[0].third).isNull()
             assertThat(loader.calls[1].third).isEqualTo(first.nextKey)
+        }
+
+    @Test
+    fun `an exact search sends the exact flag with the filters`() =
+        runTest {
+            val loader = RecordingLoader(listOf(SearchFixture.ALL_SAM_SULEK))
+            val paging =
+                SearchPagingSource(
+                    query = "sam sulek",
+                    filter = SearchFilter(contentType = ContentType.VIDEOS),
+                    loadPage = loader,
+                    exactQuery = true,
+                )
+
+            paging.loadPage()
+
+            assertThat(loader.calls[0].second).isEqualTo("EgIQAUICCAE%3D")
         }
 
     @Test
@@ -289,6 +310,38 @@ class SearchPagingSourceTest {
     }
 
     @Test
+    fun `a blocked creator's posts leave a posts strip, and a strip of only theirs goes`() {
+        fun post(
+            id: String,
+            channelId: String?,
+        ) = CommunityPost(
+            id = id,
+            authorName = id,
+            authorChannelId = channelId,
+            authorAvatarUrl = "",
+            text = "",
+            attachment = null,
+            likeCountText = "",
+            commentCountText = "",
+            commentEndpointParams = null,
+            publishedTimeText = "",
+        )
+        val mixed =
+            SearchResultItem.ShelfResult(
+                id = "p1",
+                title = "Posts",
+                kind = SearchShelfKind.POSTS,
+                posts = listOf(post("a", "UCblocked"), post("b", "UCkept"), post("c", null)),
+            )
+        val onlyBlocked = mixed.copy(id = "p2", posts = listOf(post("d", "UCblocked")))
+
+        val visible = listOf(mixed, onlyBlocked).withoutHidden(FeedExclusions(blockedChannelIds = setOf("UCblocked")))
+
+        assertThat(visible).hasSize(1)
+        assertThat((visible.single() as SearchResultItem.ShelfResult).posts.map { it.id }).containsExactly("b", "c").inOrder()
+    }
+
+    @Test
     fun `a video with no channel id survives blocking`() {
         val item = SearchResultItem.VideoResult(video(channelId = ""))
 
@@ -405,7 +458,7 @@ class SearchPagingSourceTest {
     @Test
     fun `a watch filter that keeps finding nothing ends the search after two loads`() =
         runTest {
-            val loader = RecordingLoader(listOf(SearchFixture.ALL_SAM_SULEK, SearchFixture.ALL_CONTINUATION))
+            val loader = RecordingLoader(listOf(SearchFixture.ALL_SAM_SULEK, SearchFixture.ALL_CONTINUATION), uniqueTokens = true)
             val paging = source(loader, SearchFilter(watchState = WatchState.WATCHED))
 
             val first = paging.loadPage()
@@ -414,6 +467,45 @@ class SearchPagingSourceTest {
             assertThat(first.nextKey).isNotNull()
             assertThat(second.nextKey).isNull()
             assertThat(loader.calls).hasSize(6)
+        }
+
+    @Test
+    fun `pages that keep nothing end the search without a watch filter too`() =
+        runTest {
+            val loader = RecordingLoader(listOf(SearchFixture.ALL_SAM_SULEK), uniqueTokens = true)
+            val paging = source(loader)
+
+            val first = paging.loadPage()
+            val repeatOne = paging.loadPage(first.nextKey)
+            val repeatTwo = paging.loadPage(repeatOne.nextKey)
+
+            assertThat(first.data).isNotEmpty()
+            assertThat(repeatOne.data).isEmpty()
+            assertThat(repeatOne.nextKey).isNotNull()
+            assertThat(repeatTwo.nextKey).isNull()
+        }
+
+    @Test
+    fun `a page that hands back the token it was loaded with ends the search`() =
+        runTest {
+            val token = SearchFixture(SearchFixture.ALL_CONTINUATION).toSearchResultsPage().continuation
+            val loader = RecordingLoader(listOf(SearchFixture.ALL_CONTINUATION))
+
+            val page = source(loader).loadPage(token)
+
+            assertThat(token).isNotNull()
+            assertThat(page.nextKey).isNull()
+        }
+
+    @Test
+    fun `a thinned page stops reading on when a page repeats its token`() =
+        runTest {
+            val token = SearchFixture(SearchFixture.ALL_CONTINUATION).toSearchResultsPage().continuation
+            val loader = RecordingLoader(listOf(SearchFixture.ALL_CONTINUATION))
+
+            source(loader, SearchFilter(watchState = WatchState.WATCHED)).loadPage(token)
+
+            assertThat(loader.calls).hasSize(1)
         }
 
     @Test

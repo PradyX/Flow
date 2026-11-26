@@ -14,19 +14,32 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ShortNavigationBarDefaults
 import androidx.compose.material3.WideNavigationRailDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.window.core.layout.WindowSizeClass
+import io.github.aedev.flow.data.local.NavBarLook
+import io.github.aedev.flow.data.local.NavBarScroll
+import io.github.aedev.flow.data.local.NavBarStyle
 import io.github.aedev.flow.ui.utils.LocalWindowIsLandscape
 import io.github.aedev.flow.ui.utils.LocalWindowSizeClass
 import io.github.aedev.flow.ui.utils.isExpandedWidth
@@ -42,6 +55,9 @@ object FlowNavigationDefaults {
      * container. The bar reports its real height, which grows past this at large font scales.
      */
     val BarHeight: Dp = 64.dp
+
+    /** One tab of the floating bar; shrunk, the bar is this plus the toolbar's side padding. */
+    val FloatingItemSize: Dp = FloatingNavItemHeight
 }
 
 /**
@@ -69,6 +85,7 @@ internal fun usesNavigationRail(
  * moves it with the content's scroll. The rail takes
  * its own column; [onRailWidthChanged] is only for overlays drawn outside this layout.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun FlowNavigationChrome(
     tabs: List<FlowTab>,
@@ -77,13 +94,28 @@ fun FlowNavigationChrome(
     barVisible: Boolean,
     railVisible: Boolean,
     modifier: Modifier = Modifier,
+    barCovered: Boolean = false,
+    barCoveredFraction: () -> Float = { 0f },
     barScrollState: FlowNavigationScrollState? = null,
+    barLook: NavBarLook = NavBarLook(),
     onBarHeightChanged: (Dp) -> Unit = {},
     onRailWidthChanged: (Dp) -> Unit = {},
     content: @Composable BoxScope.() -> Unit,
 ) {
     val usesRail = flowUsesNavigationRail()
     val showRail = usesRail && railVisible
+    val shrinks = !usesRail && barLook.style == NavBarStyle.FLOATING && barLook.scroll == NavBarScroll.SHRINK
+    SideEffect { barScrollState?.shrinks = shrinks }
+    val shrinkOnScroll =
+        if (barScrollState != null && barScrollState.shrinks) {
+            Modifier.floatingToolbarVerticalNestedScroll(
+                expanded = !barScrollState.isCollapsed,
+                onExpand = barScrollState::expand,
+                onCollapse = barScrollState::collapse,
+            )
+        } else {
+            Modifier
+        }
     val density = LocalDensity.current
     val railInsets = WideNavigationRailDefaults.windowInsets
 
@@ -104,6 +136,7 @@ fun FlowNavigationChrome(
                 Modifier
                     .weight(1f)
                     .fillMaxHeight()
+                    .then(shrinkOnScroll)
                     .then(
                         if (showRail) {
                             Modifier.consumeWindowInsets(railInsets.only(WindowInsetsSides.Start))
@@ -119,7 +152,10 @@ fun FlowNavigationChrome(
                     selectedTab = selectedTab,
                     onTabSelected = onTabSelected,
                     visible = barVisible,
+                    covered = barCovered,
+                    coveredFraction = barCoveredFraction,
                     scrollState = barScrollState,
+                    look = barLook,
                     onHeightChanged = onBarHeightChanged,
                 )
             }
@@ -133,29 +169,57 @@ private fun BoxScope.NavigationBarSlot(
     selectedTab: FlowTab?,
     onTabSelected: (FlowTab) -> Unit,
     visible: Boolean,
+    covered: Boolean,
+    coveredFraction: () -> Float,
     scrollState: FlowNavigationScrollState?,
+    look: NavBarLook,
     onHeightChanged: (Dp) -> Unit,
 ) {
     val density = LocalDensity.current
     val bottomInsetPx = ShortNavigationBarDefaults.windowInsets.getBottom(density)
     val motion = MaterialTheme.motionScheme
+    val travelToBottom = remember { mutableFloatStateOf(0f) }
     AnimatedVisibility(
         visible = visible,
         modifier = Modifier.align(Alignment.BottomCenter),
         enter = slideInVertically(motion.defaultSpatialSpec()) { it } + fadeIn(motion.defaultEffectsSpec()),
         exit = slideOutVertically(motion.fastSpatialSpec()) { it } + fadeOut(motion.fastEffectsSpec()),
     ) {
-        FlowNavigationBar(
-            tabs = tabs,
-            selectedTab = selectedTab,
-            onTabSelected = onTabSelected,
-            modifier =
-                Modifier
-                    .testTag(FLOW_NAV_BAR_TAG)
-                    .onSizeChanged {
-                        onHeightChanged(with(density) { (it.height - bottomInsetPx).toDp() })
-                        scrollState?.setBarHeight(it.height.toFloat())
-                    }.offset { IntOffset(0, scrollState?.offsetPx?.roundToInt() ?: 0) },
-        )
+        // While a video player is up the bar stays under it and rides its expand fraction down
+        // off screen, measured from where the bar rests so the scroll-away offset is not counted.
+        val barModifier =
+            Modifier
+                .testTag(FLOW_NAV_BAR_TAG)
+                .onPlaced { coords ->
+                    travelToBottom.floatValue = coords.findRootCoordinates().size.height - coords.positionInRoot().y
+                }.onSizeChanged {
+                    onHeightChanged(with(density) { (it.height - bottomInsetPx).toDp() })
+                    scrollState?.setBarHeight(it.height.toFloat())
+                }.offset { IntOffset(0, scrollState?.offsetPx?.roundToInt() ?: 0) }
+                .graphicsLayer { translationY = coveredFraction().coerceIn(0f, 1f) * travelToBottom.floatValue }
+                .then(if (covered) Modifier.clearAndSetSemantics { } else Modifier)
+        when (look.style) {
+            NavBarStyle.STANDARD -> {
+                FlowNavigationBar(
+                    tabs = tabs,
+                    selectedTab = selectedTab,
+                    onTabSelected = onTabSelected,
+                    labels = look.labels,
+                    modifier = barModifier,
+                )
+            }
+
+            NavBarStyle.FLOATING -> {
+                FlowFloatingNavigationBar(
+                    tabs = tabs,
+                    selectedTab = selectedTab,
+                    onTabSelected = onTabSelected,
+                    look = look,
+                    collapsed = scrollState?.isCollapsed == true,
+                    onExpand = { scrollState?.expand() },
+                    modifier = barModifier,
+                )
+            }
+        }
     }
 }

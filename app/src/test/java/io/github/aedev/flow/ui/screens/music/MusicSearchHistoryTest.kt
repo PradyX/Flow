@@ -1,5 +1,9 @@
 package io.github.aedev.flow.ui.screens.music
 
+import androidx.lifecycle.ViewModelStore
+import io.github.aedev.flow.data.contentfilter.aislist.AiListMatcher
+import io.github.aedev.flow.data.contentfilter.aislist.AiListRepository
+import io.github.aedev.flow.data.local.PlayerPreferences
 import io.github.aedev.flow.data.local.PrivacyGate
 import io.github.aedev.flow.data.local.SearchHistoryRepository
 import io.github.aedev.flow.data.local.SearchHistoryScope
@@ -15,6 +19,7 @@ import io.mockk.mockkObject
 import io.mockk.unmockkAll
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -30,6 +35,13 @@ class MusicSearchHistoryTest {
     private val history: SearchHistoryRepository = mockk(relaxed = true)
     private var deepFlow = false
 
+    /**
+     * The ViewModel loads on the app's own pools, so its work can outlive the test. Clearing it
+     * before unmocking cancels that work instead of letting it reach the real services and fail
+     * in whichever runTest comes next.
+     */
+    private val viewModels = ViewModelStore()
+
     private fun viewModel() =
         MusicSearchViewModel(
             mockk<DownloadManager>(relaxed = true).also { every { it.downloadedTracks } returns flowOf(emptyList()) },
@@ -40,7 +52,9 @@ class MusicSearchHistoryTest {
                 scrobbleDuringDeepFlow = { false },
             ),
             mockk(relaxed = true),
-        )
+            mockk<AiListRepository>().also { every { it.matcher } returns MutableStateFlow(AiListMatcher.NONE) },
+            mockk<PlayerPreferences>().also { every { it.deepFlowActive } returns flowOf(false) },
+        ).also { viewModels.put("music_search_${viewModels.keys().size}", it) }
 
     @Before
     fun setUp() {
@@ -53,6 +67,7 @@ class MusicSearchHistoryTest {
 
     @After
     fun tearDown() {
+        viewModels.clear()
         Dispatchers.resetMain()
         unmockkAll()
     }

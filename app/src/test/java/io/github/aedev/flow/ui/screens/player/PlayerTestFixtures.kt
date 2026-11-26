@@ -153,10 +153,12 @@ internal fun relaxedVideoPlayerViewModel(
     every { viewModel.commentSortOptions } returns MutableStateFlow(emptyList())
     every { viewModel.commentTotalText } returns MutableStateFlow(null)
     every { viewModel.commentsDisabled } returns MutableStateFlow(false)
+    every { viewModel.oldestCommentsCapped } returns MutableStateFlow(false)
     every { viewModel.descriptionState } returns MutableStateFlow(null)
     every { viewModel.downloadedVideoIds } returns MutableStateFlow(emptySet())
     every { viewModel.videoNote } returns MutableStateFlow(null)
     every { viewModel.videoNotesEnabled } returns MutableStateFlow(false)
+    every { viewModel.videoTitleMaxLines } returns MutableStateFlow(1)
     every { viewModel.isVideoSavedToAnyPlaylist(any()) } returns flowOf(false)
     return viewModel
 }

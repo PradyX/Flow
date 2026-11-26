@@ -3,6 +3,7 @@ package io.github.aedev.flow.ui.screens.player
 import io.github.aedev.flow.data.local.VideoQuality
 import io.github.aedev.flow.data.model.Video
 import io.github.aedev.flow.player.PlayerChannelMetadataPolicy
+import io.github.aedev.flow.player.live.LivePegPolicy
 import io.github.aedev.flow.player.stream.CaptionTrackResolver
 import io.github.aedev.flow.player.stream.InnerTubeStreamBridge
 import io.github.aedev.flow.player.stream.InnerTubeVideoStreamExtractor
@@ -12,11 +13,12 @@ import io.github.aedev.flow.player.stream.ServicePlaybackStreamSelector
 import io.github.aedev.flow.player.stream.StreamProcessor
 import io.github.aedev.flow.player.stream.StreamSizeEstimator
 import io.github.aedev.flow.player.stream.VideoQualityOptions
+import io.github.aedev.flow.player.stream.model.AudioStream
+import io.github.aedev.flow.player.stream.model.VideoStream
+import io.github.aedev.flow.ui.screens.player.state.LiveBroadcastTimes
 import io.github.aedev.flow.ui.screens.player.state.blankVideo
 import io.github.aedev.flow.utils.OriginalTextPolicy
 import io.github.aedev.flow.utils.ThumbnailUrlResolver
-import org.schabi.newpipe.extractor.stream.AudioStream
-import org.schabi.newpipe.extractor.stream.VideoStream
 
 /**
  * Turns one InnerTube extraction into the values the player screen plays from: the identity the
@@ -51,6 +53,8 @@ internal class PlaybackStreamPreparer(
         val subtitles: List<ResolvedCaption>,
         val isAdaptiveMode: Boolean,
         val streamSizes: Map<String, Long>,
+        val ratingsAllowed: Boolean,
+        val isArchivedLivestream: Boolean,
     )
 
     data class LiveStreams(
@@ -58,6 +62,9 @@ internal class PlaybackStreamPreparer(
         val hlsUrl: String?,
         val dashManifestUrl: String?,
         val subtitles: List<ResolvedCaption>,
+        val isDvrEnabled: Boolean,
+        val pegRule: LivePegPolicy.Rule?,
+        val ratingsAllowed: Boolean,
     )
 
     fun assembleVod(
@@ -97,6 +104,8 @@ internal class PlaybackStreamPreparer(
                     result.audioFormats,
                     durationSeconds * 1000L,
                 ),
+            ratingsAllowed = details?.allowRatings != false,
+            isArchivedLivestream = LiveBroadcastTimes.isArchived(result.playerResponse),
         )
     }
 
@@ -110,6 +119,9 @@ internal class PlaybackStreamPreparer(
             hlsUrl = result.liveHlsUrl,
             dashManifestUrl = result.liveDashUrl,
             subtitles = captionStreams(result, CaptionTrackResolver.NO_PREFERRED_LANGUAGE),
+            isDvrEnabled = result.playerResponse.videoDetails?.isLiveDvrEnabled != false,
+            pegRule = LivePegPolicy.ruleFor(result.playerResponse),
+            ratingsAllowed = result.playerResponse.videoDetails?.allowRatings != false,
         )
 
     private fun identity(
@@ -137,6 +149,7 @@ internal class PlaybackStreamPreparer(
                 ?.url
                 ?: cached?.thumbnailUrl ?: ThumbnailUrlResolver.normalizeVideoThumbnail(videoId, null)
         val known = blankVideo(videoId, cached)
+        val broadcastStartMs = LiveBroadcastTimes.startMs(result.playerResponse)
         return StreamIdentity(
             enrichedVideo =
                 known.copy(
@@ -149,6 +162,8 @@ internal class PlaybackStreamPreparer(
                     tags = keywordTags(result, cached),
                     // Only when the winning client returned a microformat: WEB/MWEB do, VISIONOS does not.
                     category = microformatCategory(result) ?: cached?.category,
+                    timestamp = broadcastStartMs ?: known.timestamp,
+                    timestampIsExact = broadcastStartMs != null || known.timestampIsExact,
                 ),
             title = title,
             channel = channel,

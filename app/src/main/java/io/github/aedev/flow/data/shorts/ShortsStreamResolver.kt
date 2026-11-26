@@ -1,6 +1,14 @@
 package io.github.aedev.flow.data.shorts
 
+import android.content.ComponentCallbacks2
+import android.content.Context
+import android.content.res.Configuration
 import android.util.Log
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.dash.manifest.DashManifest
+import dagger.hilt.android.qualifiers.ApplicationContext
+import io.github.aedev.flow.AppMemoryTrim
 import io.github.aedev.flow.data.local.PlayerPreferences
 import io.github.aedev.flow.innertube.models.response.PlayerResponse
 import io.github.aedev.flow.player.audio.LoudnessGain
@@ -36,6 +44,8 @@ data class ShortPlaybackStreams(
     /** See [ShortsDashManifest]. Null means play the URL progressively. */
     val videoDashManifest: String? = null,
     val audioDashManifest: String? = null,
+    /** Auto's adaptive ladder, see [shortsAutoLadder]; null plays the single [videoUrl]. */
+    val videoAdaptiveManifest: DashManifest? = null,
     val details: ShortDetails? = null,
     /** YouTube's loudness for the reel, in dB, for volume normalization. */
     val loudnessGainDb: Float? = null,
@@ -56,6 +66,7 @@ data class ShortAudioTrack(
     val dashManifest: String?,
     val isOriginal: Boolean,
     val bitrate: Int,
+    val loudnessGainDb: Float? = null,
 )
 
 /**
@@ -70,10 +81,17 @@ class ShortsStreamResolver internal constructor(
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
     @Inject
-    constructor(playerPreferences: PlayerPreferences) : this(
+    constructor(
+        @ApplicationContext context: Context,
+        playerPreferences: PlayerPreferences,
+    ) : this(
         playerPreferences = playerPreferences,
         extract = { videoId -> InnerTubeVideoStreamExtractor.extract(videoId) },
-    )
+    ) {
+        // Listening here rather than being trimmed from the application means a trim never creates a
+        // resolver for a user who has not opened Shorts.
+        context.registerComponentCallbacks(TrimOnMemoryPressure(::trimMemory))
+    }
 
     private class Expiring<T>(
         val value: T,
@@ -85,6 +103,11 @@ class ShortsStreamResolver internal constructor(
     private val scope = CoroutineScope(SupervisorJob() + PerformanceDispatcher.networkIO)
     private val extractionCoalescer = InFlightRequestCoalescer<String, VideoExtractionResult?>(scope)
     private val streamCoalescer = InFlightRequestCoalescer<String, ShortPlaybackStreams?>(scope)
+
+    fun trimMemory() {
+        synchronized(extractions) { extractions.clear() }
+        synchronized(streams) { streams.clear() }
+    }
 
     suspend fun resolve(
         videoId: String,
@@ -136,6 +159,7 @@ class ShortsStreamResolver internal constructor(
     suspend fun availableAudioTracks(videoId: String): List<ShortAudioTrack> {
         val result = extraction(videoId) ?: return emptyList()
         val durationMs = result.durationMs()
+        val audioConfig = result.playerResponse.playerConfig?.audioConfig
         return result
             .playableAudioFormats()
             .groupBy { it.audioTrack?.id ?: it.audioLanguageTag ?: "default" }
@@ -148,6 +172,7 @@ class ShortsStreamResolver internal constructor(
                     dashManifest = ShortsDashManifest.forAudio(best, url, durationMs),
                     isOriginal = best.isOriginal,
                     bitrate = (best.averageBitrate ?: best.bitrate).coerceAtLeast(0),
+                    loudnessGainDb = LoudnessGain.gainDb(audioConfig, best.loudnessDb, best.trackAbsoluteLoudnessLkfs),
                 )
             }.sortedWith(compareByDescending<ShortAudioTrack> { it.isOriginal }.thenBy { it.label })
     }
@@ -195,6 +220,7 @@ class ShortsStreamResolver internal constructor(
         return nowMillis() + ttlSeconds * 1_000L * EXPIRY_FRACTION_PERCENT / 100L
     }
 
+    @OptIn(UnstableApi::class)
     private fun VideoExtractionResult.toPlaybackStreams(
         targetHeight: Int,
         preferredAudioLanguage: String,
@@ -211,8 +237,14 @@ class ShortsStreamResolver internal constructor(
             durationMs = durationMs,
             videoDashManifest = ShortsDashManifest.forVideo(video, videoUrl, durationMs),
             audioDashManifest = audio?.url?.let { ShortsDashManifest.forAudio(audio, it, durationMs) },
+            videoAdaptiveManifest = if (targetHeight == 0) shortsAutoLadder(videoFormats, video, durationMs) else null,
             details = playerResponse.videoDetails?.toShortDetails(durationMs),
-            loudnessGainDb = LoudnessGain.gainDb(playerResponse.playerConfig?.audioConfig, audio?.loudnessDb),
+            loudnessGainDb =
+                LoudnessGain.gainDb(
+                    playerResponse.playerConfig?.audioConfig,
+                    audio?.loudnessDb,
+                    audio?.trackAbsoluteLoudnessLkfs,
+                ),
         )
     }
 
@@ -238,4 +270,17 @@ class ShortsStreamResolver internal constructor(
                 override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, V>?): Boolean = size > maxEntries
             }
     }
+}
+
+internal class TrimOnMemoryPressure(
+    private val trim: () -> Unit,
+) : ComponentCallbacks2 {
+    override fun onTrimMemory(level: Int) {
+        if (AppMemoryTrim.releasesVolatileMemory(level)) trim()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) = Unit
+
+    @Deprecated("Deprecated in Java")
+    override fun onLowMemory() = trim()
 }

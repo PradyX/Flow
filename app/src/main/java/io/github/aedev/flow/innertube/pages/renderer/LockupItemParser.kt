@@ -1,6 +1,7 @@
 package io.github.aedev.flow.innertube.pages.renderer
 
 import io.github.aedev.flow.data.model.Channel
+import io.github.aedev.flow.data.model.CollectionLabels
 import io.github.aedev.flow.data.model.Playlist
 import io.github.aedev.flow.data.model.Video
 import io.github.aedev.flow.data.model.VideoCollaborator
@@ -13,10 +14,17 @@ import io.github.aedev.flow.innertube.pages.youtubeText
 import io.github.aedev.flow.utils.ThumbnailUrlResolver
 import kotlinx.serialization.json.JsonObject
 
+private const val DEFAULT_METADATA_DELIMITER = " • "
+
+// A playlist page's browse id is the playlist id behind this prefix.
+private const val PLAYLIST_PAGE_BROWSE_PREFIX = "VL"
+
 private const val LOCKUP_CONTENT_TYPE_COURSE = "LOCKUP_CONTENT_TYPE_COURSE"
 
 // A channel's Home tab lists the reels it collaborated on as plain video lockups of this type.
 private const val LOCKUP_CONTENT_TYPE_SHORT = "LOCKUP_CONTENT_TYPE_SHORT"
+
+private const val LIVE_BADGE_STYLE = "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE"
 
 internal fun JsonObject.toLockupItem(owner: FeedItemOwner): FeedItem? {
     val contentId = this["contentId"].stringOrNull()?.takeIf(String::isNotBlank) ?: return null
@@ -88,7 +96,11 @@ private fun JsonObject.lockupVideo(
 ): Video {
     val (viewsText, uploadText, uploadTimestamp) = lockupDateAndViews(parts, YouTube.locale.hl)
     val duration = badges.firstNotNullOfOrNull(::parseDurationText) ?: 0
-    val isLive = viewsText?.contains("watching", ignoreCase = true) == true || badges.any { it.marksLive() }
+    // The badge's style says live in every language; its text ("LIVE", "EN DIRECTO") is translated.
+    val isLive =
+        lockupBadgeModels().any { it["badgeStyle"].stringOrNull() == LIVE_BADGE_STYLE } ||
+            viewsText?.contains("watching", ignoreCase = true) == true ||
+            badges.any { it.marksLive() }
     // A stream that has not started carries a badge that is neither a duration nor LIVE ("Upcoming"),
     // and its date row is the scheduled start, already rendered by the server.
     val isUpcoming = !isLive && duration == 0 && badges.any { it.marksUpcoming() }
@@ -196,12 +208,17 @@ private fun JsonObject?.lockupByline(): FeedItemOwner? =
             FeedItemOwner(id = channelId, name = name, handle = command?.browseHandle())
         }.firstOrNull()
 
-private fun JsonObject?.metadataParts(): List<String> =
+private fun JsonObject?.metadataParts(): List<String> = metadataPartTexts().mapNotNull { it.youtubeText()?.takeIf(String::isNotBlank) }
+
+private fun JsonObject?.contentMetadata(): JsonObject? =
     this
         ?.get("metadata")
         .objectOrNull()
         ?.get("contentMetadataViewModel")
         .objectOrNull()
+
+private fun JsonObject?.metadataPartTexts(): List<JsonObject> =
+    contentMetadata()
         ?.get("metadataRows")
         .arrayOrNull()
         .orEmpty()
@@ -211,14 +228,42 @@ private fun JsonObject?.metadataParts(): List<String> =
                 ?.get("metadataParts")
                 .arrayOrNull()
                 .orEmpty()
-                .mapNotNull {
-                    it
-                        .objectOrNull()
-                        ?.get("text")
-                        .youtubeText()
-                        ?.takeIf(String::isNotBlank)
-                }
+                .mapNotNull { it.objectOrNull()?.get("text").objectOrNull() }
         }
+
+/**
+ * The labels a playlist or Mix lockup prints. Its "View full playlist" part is a link to the
+ * playlist page, which the whole card already opens, so it is left out whatever the language.
+ */
+internal fun JsonObject.lockupCollectionLabels(): CollectionLabels {
+    val metadata = this["metadata"].objectOrNull()?.get("lockupMetadataViewModel").objectOrNull()
+    val parts =
+        metadata
+            .metadataPartTexts()
+            .filterNot { it.linksToPlaylistPage() }
+            .mapNotNull { it.youtubeText()?.takeIf(String::isNotBlank) }
+    val delimiter = metadata.contentMetadata()?.get("delimiter").stringOrNull() ?: DEFAULT_METADATA_DELIMITER
+    return CollectionLabels(
+        badge = lockupBadgeModels().firstNotNullOfOrNull { it["text"].youtubeText()?.takeIf(String::isNotBlank) },
+        byline = parts.firstOrNull(),
+        details = parts.drop(1).joinToString(delimiter).takeIf(String::isNotEmpty),
+    )
+}
+
+private fun JsonObject.linksToPlaylistPage(): Boolean =
+    this["commandRuns"]
+        .arrayOrNull()
+        ?.firstOrNull()
+        .objectOrNull()
+        ?.get("onTap")
+        .objectOrNull()
+        ?.get("innertubeCommand")
+        .objectOrNull()
+        ?.get("browseEndpoint")
+        .objectOrNull()
+        ?.get("browseId")
+        .stringOrNull()
+        ?.startsWith(PLAYLIST_PAGE_BROWSE_PREFIX) == true
 
 private fun JsonObject.thumbnailViewModel(): JsonObject? =
     this["contentImage"]
@@ -237,6 +282,11 @@ private fun JsonObject.lockupThumbnailUrl(): String? = thumbnailViewModel()?.get
 
 /** Duration, "12 videos" and the LIVE marker all arrive as thumbnail badges. */
 private fun JsonObject.lockupBadges(): List<String> =
+    lockupBadgeModels().mapNotNull { model ->
+        model["text"].youtubeText()?.takeIf(String::isNotBlank) ?: model["badgeStyle"].stringOrNull()
+    }
+
+private fun JsonObject.lockupBadgeModels(): List<JsonObject> =
     thumbnailViewModel()
         ?.get("overlays")
         .arrayOrNull()
@@ -256,11 +306,7 @@ private fun JsonObject.lockupBadges(): List<String> =
                         ?.get("badges")
                         .arrayOrNull()
                     ?: return@flatMap emptyList()
-            badges.mapNotNull { badge ->
-                val model = badge.objectOrNull()?.get("thumbnailBadgeViewModel").objectOrNull()
-                model?.get("text").youtubeText()?.takeIf(String::isNotBlank)
-                    ?: model?.get("badgeStyle").stringOrNull()
-            }
+            badges.mapNotNull { it.objectOrNull()?.get("thumbnailBadgeViewModel").objectOrNull() }
         }
 
 private fun String.mentionsSubscribers(): Boolean = contains("subscriber", ignoreCase = true)

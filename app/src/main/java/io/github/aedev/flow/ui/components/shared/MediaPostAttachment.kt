@@ -7,16 +7,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -37,10 +34,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import io.github.aedev.flow.R
+import io.github.aedev.flow.data.images.PostImage
+import io.github.aedev.flow.data.model.Playlist
 import io.github.aedev.flow.data.model.Video
 import io.github.aedev.flow.innertube.pages.renderer.PostAttachment
+import io.github.aedev.flow.ui.components.PlaylistCard
+import io.github.aedev.flow.ui.components.PlaylistCardLayout
+import io.github.aedev.flow.ui.components.layout.navigation.LocalMediaNavigator
 import io.github.aedev.flow.ui.theme.extendedColors
 import io.github.aedev.flow.utils.ThumbnailUrlResolver
+import io.github.aedev.flow.utils.YouTubeLink
 import io.github.aedev.flow.utils.formatDuration
 import io.github.aedev.flow.utils.formatViewCount
 
@@ -53,9 +56,25 @@ fun MediaPostAttachment(
 ) {
     when (attachment) {
         is PostAttachment.Images -> PostImages(attachment.urls, modifier, compact)
-        is PostAttachment.Poll -> PostPoll(attachment, modifier)
+        is PostAttachment.Poll -> MediaPostPoll(attachment, modifier)
         is PostAttachment.SharedVideo -> PostSharedVideo(attachment.video, onVideoClick, modifier)
+        is PostAttachment.SharedPlaylist -> PostSharedPlaylist(attachment.playlist, modifier)
     }
+}
+
+@Composable
+private fun PostSharedPlaylist(
+    playlist: Playlist,
+    modifier: Modifier = Modifier,
+) {
+    val navigator = LocalMediaNavigator.current
+    PlaylistCard(
+        playlist = playlist,
+        onClick = { navigator.openLink(YouTubeLink.Playlist(playlist.id, isMusic = false)) },
+        layout = PlaylistCardLayout.LIST,
+        modifier = modifier.padding(horizontal = PostHorizontalPadding),
+        useInternalPadding = false,
+    )
 }
 
 @Composable
@@ -64,7 +83,7 @@ private fun PostImages(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
-    val resolved = remember(urls) { urls.map { ThumbnailUrlResolver.resolveCommunityPostImage(it) } }
+    val resolved = remember(urls) { urls.map { PostImage(it) } }
     val whole = remember(urls) { urls.map { ThumbnailUrlResolver.resolveCommunityPostImage(it, uncropped = true) } }
     if (resolved.isEmpty()) return
 
@@ -77,7 +96,7 @@ private fun PostImages(
     // that there is one.
     if (resolved.size == 1) {
         AsyncImage(
-            model = rememberLoopCappedImageRequest(if (compact) resolved.first() else whole.first()),
+            model = rememberLoopCappedImageRequest(if (compact) resolved.first() else PostImage(urls.first(), uncropped = true)),
             contentDescription = stringResource(R.string.community_post_image_content_description),
             modifier =
                 modifier
@@ -130,56 +149,6 @@ private fun PostImages(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.inverseOnSurface,
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun PostPoll(
-    poll: PostAttachment.Poll,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier.fillMaxWidth().padding(horizontal = PostHorizontalPadding),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        poll.choices.forEach { choice ->
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = choice.text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f, fill = false),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    choice.voteCountText?.takeIf { it.isNotBlank() }?.let { votes ->
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            text = votes,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.extendedColors.textSecondary,
-                        )
-                    }
-                }
-                choice.voteRatio?.let { ratio ->
-                    LinearProgressIndicator(
-                        progress = { ratio.coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-        }
-        poll.totalVotesText?.takeIf { it.isNotBlank() }?.let { total ->
-            Text(
-                text = total,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.extendedColors.textSecondary,
             )
         }
     }

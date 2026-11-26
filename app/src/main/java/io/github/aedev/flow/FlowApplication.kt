@@ -1,7 +1,6 @@
 package io.github.aedev.flow
 
 import android.app.Application
-import android.content.ComponentCallbacks2
 import android.content.Context
 import android.util.Log
 import androidx.compose.material3.ComposeMaterial3Flags
@@ -14,6 +13,7 @@ import io.github.aedev.flow.applock.AppLock
 import io.github.aedev.flow.data.contentfilter.aislist.AiListRepository
 import io.github.aedev.flow.data.local.PlayerPreferences
 import io.github.aedev.flow.data.local.SubscriptionRepository
+import io.github.aedev.flow.data.music.MusicCache
 import io.github.aedev.flow.data.profile.ActiveProfile
 import io.github.aedev.flow.data.profile.PendingSlice
 import io.github.aedev.flow.data.profile.PostSwitchWork
@@ -22,7 +22,7 @@ import io.github.aedev.flow.data.profile.ProfileSlices
 import io.github.aedev.flow.data.profile.ProfileWebView
 import io.github.aedev.flow.data.profile.ProfileWorkReconciler
 import io.github.aedev.flow.data.recommendation.FlowNeuroEngine
-import io.github.aedev.flow.data.repository.NewPipeDownloader
+import io.github.aedev.flow.data.repository.YouTubePlaylistRepository
 import io.github.aedev.flow.data.repository.YouTubeRepository
 import io.github.aedev.flow.discord.DiscordPresenceRuntime
 import io.github.aedev.flow.innertube.YouTube
@@ -33,6 +33,8 @@ import io.github.aedev.flow.notification.BackgroundCheckScheduler
 import io.github.aedev.flow.notification.BreakReminderTimer
 import io.github.aedev.flow.notification.DailyLimitGuard
 import io.github.aedev.flow.notification.NotificationHelper
+import io.github.aedev.flow.platform.memory.HeapSampler
+import io.github.aedev.flow.player.GlobalPlayerState
 import io.github.aedev.flow.player.PlaybackShutdown
 import io.github.aedev.flow.player.SleepTimerManager
 import io.github.aedev.flow.sync2.service.LinkedCatchUp
@@ -45,9 +47,6 @@ import io.github.aedev.flow.utils.FlowCrashHandler
 import io.github.aedev.flow.utils.PerformanceDispatcher
 import io.github.aedev.flow.utils.cipher.PipePipeNsigDecoder
 import io.github.aedev.flow.utils.contentYouTubeLocale
-import io.github.aedev.flow.utils.newPipeContentCountry
-import io.github.aedev.flow.utils.newPipeLocalization
-import io.github.aedev.flow.utils.potoken.NewPipePoTokenProvider
 import io.github.aedev.flow.utils.potoken.VisitorIdentityStore
 import io.github.aedev.flow.utils.potoken.WebPoTokenSession
 import kotlinx.coroutines.CoroutineScope
@@ -65,11 +64,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
-import org.conscrypt.Conscrypt
-import org.schabi.newpipe.extractor.NewPipe
-import org.schabi.newpipe.extractor.localization.ContentCountry
-import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeStreamExtractor
-import java.security.Security
 import java.util.Locale
 import javax.inject.Inject
 
@@ -82,6 +76,9 @@ class FlowApplication :
 
     @Inject
     lateinit var okHttpClient: OkHttpClient
+
+    @Inject
+    lateinit var playlistRepository: YouTubePlaylistRepository
 
     @Inject
     lateinit var vpnStateMonitor: VpnStateMonitor
@@ -122,6 +119,12 @@ class FlowApplication :
     @Inject
     lateinit var aiList: AiListRepository
 
+    @Inject
+    lateinit var heapSampler: HeapSampler
+
+    @Inject
+    lateinit var youTubeRepository: dagger.Lazy<YouTubeRepository>
+
     override fun newImageLoader(context: PlatformContext): ImageLoader = imageLoader
 
     companion object {
@@ -147,35 +150,18 @@ class FlowApplication :
         breakReminderTimer.install()
         dailyLimitGuard.install()
         appLock.install()
-        YouTube.cacheDirectory = cacheDir.resolve("innertube_http_cache")
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            // Left by the InnerTube HTTP cache of older builds; nothing writes to it any more.
+            cacheDir.resolve("innertube_http_cache").deleteRecursively()
+        }
 
         DiscordPresenceRuntime.initialize(this, okHttpClient)
 
         val playerPreferences = PlayerPreferences(this)
 
-        // Injects modern TLS/SSL certificates so OkHttp and Ktor don't crash
-        if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.N_MR1) {
-            Security.insertProviderAt(Conscrypt.newProvider(), 1)
-        }
-
         // Install crash handler for real-time monitoring
         FlowCrashHandler.install(this)
-
-        try {
-            // Seeded from the device locale so the very first extraction is already localized; the
-            // stored app-language/region preference takes over as soon as it loads below.
-            val localization = newPipeLocalization(Locale.getDefault().toLanguageTag())
-            NewPipe.init(
-                NewPipeDownloader.getInstance(this),
-                localization,
-                newPipeContentCountry(Locale.getDefault().country),
-            )
-            YoutubeStreamExtractor.setPoTokenProvider(NewPipePoTokenProvider)
-            Log.d(TAG, "NewPipe initialized with ${localization.localizationCode}")
-        } catch (e: Exception) {
-            // Log error but don't crash the app
-            Log.e(TAG, "Failed to initialize NewPipe", e)
-        }
+        heapSampler.install()
 
         try {
             io.github.aedev.flow.utils.cipher.CipherDeobfuscator
@@ -263,34 +249,8 @@ class FlowApplication :
                 contentYouTubeLocale(appLanguage, contentLanguage, region, AppLanguageManager.deviceLocale(this@FlowApplication))
             }.distinctUntilChanged().collectLatest { newLocale ->
                 YouTube.locale = newLocale
-                NewPipe.setupLocalization(
-                    newPipeLocalization(newLocale.hl),
-                    ContentCountry(newLocale.gl),
-                )
                 Log.d(TAG, "Dynamic YouTube Locale updated: gl=${newLocale.gl}, hl=${newLocale.hl}")
                 homeFeedLanguageReset.onContentLanguage(newLocale.hl)
-            }
-        }
-
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            var lastRegion: String? = null
-            playerPreferences.trendingRegion.collectLatest { region ->
-                if (lastRegion != null && lastRegion != region) {
-                    Log.d(TAG, "Trending region changed from $lastRegion to $region. Invalidate visitor data.")
-                    YouTube.visitorData = null
-
-                    YouTube
-                        .visitorData()
-                        .onSuccess { data ->
-                            if (!data.isNullOrEmpty()) {
-                                YouTube.visitorData = data
-                                Log.d(TAG, "Fresh visitorData fetched for region: $region")
-                            }
-                        }.onFailure { e ->
-                            Log.w(TAG, "Failed to fetch fresh visitorData: ${e.message}")
-                        }
-                }
-                lastRegion = region
             }
         }
 
@@ -336,23 +296,31 @@ class FlowApplication :
         releaseVolatileMemory()
     }
 
-    @Suppress("DEPRECATION")
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         FlowCrashHandler.recordPhase("memory", "FlowApplication.onTrimMemory level=$level")
-        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+        if (AppMemoryTrim.releasesRefetchableCaches(level)) {
+            releaseRefetchableCaches()
+        }
+        if (AppMemoryTrim.releasesVolatileMemory(level)) {
             releaseVolatileMemory()
         }
     }
 
+    private fun releaseRefetchableCaches() {
+        if (::youTubeRepository.isInitialized) {
+            youTubeRepository.get().trimWatchCache(keepVideoId = GlobalPlayerState.currentVideo.value?.id)
+        }
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { MusicCache.clearAll() }
+    }
+
     private fun releaseVolatileMemory() {
-        if (::imageLoader.isInitialized) {
-            imageLoader.memoryCache?.clear()
+        if (::playlistRepository.isInitialized) playlistRepository.trimMemory()
+        if (::youTubeRepository.isInitialized) {
+            val repository = youTubeRepository.get()
+            repository.trimWatchCache(keepVideoId = GlobalPlayerState.currentVideo.value?.id)
+            repository.trimMetadataCaches()
         }
-        if (::okHttpClient.isInitialized) {
-            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-                okHttpClient.connectionPool.evictAll()
-            }
-        }
+        YouTube.trimMemory()
     }
 }

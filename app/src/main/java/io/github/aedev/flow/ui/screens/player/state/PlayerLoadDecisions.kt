@@ -56,6 +56,10 @@ internal fun VideoPlayerUiState.beginLoadFor(videoId: String): VideoPlayerUiStat
         streamSizes = emptyMap(),
         savedPosition = null,
         relatedVideos = emptyList(),
+        upNextVideoId = null,
+        relatedContinuation = null,
+        relatedAppend = RelatedAppend.IDLE,
+        relatedCollections = emptyList(),
         channelAvatarUrl =
             cachedVideo
                 ?.takeIf { it.id == videoId }
@@ -150,10 +154,18 @@ internal fun VideoPlayerUiState.shouldReopenInsteadOfPlaying(
 
 /**
  * Whether a link to [videoId] should only reopen the sheet. A failed, restored or upcoming screen
- * for the same video still needs `playVideo`, or re-sharing it after a failure does nothing.
+ * for the same video still needs `playVideo`, or re-sharing it after a failure does nothing. So does
+ * a screen whose player let the video go, as when it was handed to another device and comes back.
  */
-internal fun VideoPlayerUiState.shouldExpandInsteadOfPlaying(videoId: String): Boolean =
-    cachedVideo?.id == videoId && !isRestoredSession && error == null && !isUpcoming
+internal fun VideoPlayerUiState.shouldExpandInsteadOfPlaying(
+    videoId: String,
+    playerVideoId: String?,
+): Boolean =
+    cachedVideo?.id == videoId &&
+        !isRestoredSession &&
+        error == null &&
+        !isUpcoming &&
+        (isLoading || playerVideoId == videoId)
 
 /** What a late prepare has to arm from the screen state alone, when the player owns no media item. */
 internal sealed interface LatePrepare {

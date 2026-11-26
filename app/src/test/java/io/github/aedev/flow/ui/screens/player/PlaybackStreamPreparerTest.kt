@@ -151,6 +151,15 @@ class PlaybackStreamPreparerTest {
     }
 
     @Test
+    fun `a live stream is seekable unless its creator turned DVR off`() {
+        val base = playerResponse(title = "t", author = "a", channelId = "c", lengthSeconds = "0", thumbnailUrl = null)
+        val noDvr = base.copy(videoDetails = base.videoDetails!!.copy(isLive = true, isLiveDvrEnabled = false))
+
+        assertThat(preparer.assembleLive(VIDEO_ID, null, extraction(playerResponse = base, isLive = true)).isDvrEnabled).isTrue()
+        assertThat(preparer.assembleLive(VIDEO_ID, null, extraction(playerResponse = noDvr, isLive = true)).isDvrEnabled).isFalse()
+    }
+
+    @Test
     fun `a live extraction still prefers the cached title over the Live placeholder`() {
         val result =
             extraction(
@@ -203,6 +212,50 @@ class PlaybackStreamPreparerTest {
         val identity = preparer.assembleVod(VIDEO_ID, cached, vodStep()).identity
 
         assertThat(identity.enrichedVideo.tags).containsExactly("remembered")
+    }
+
+    @Test
+    fun `a creator who hides likes turns the like count off for VOD and live`() {
+        val step = vodStep()
+        val hidden = step.result.playerResponse.let { it.copy(videoDetails = it.videoDetails!!.copy(allowRatings = false)) }
+
+        assertThat(preparer.assembleVod(VIDEO_ID, null, step).ratingsAllowed).isTrue()
+        assertThat(preparer.assembleVod(VIDEO_ID, null, step.copy(result = extraction(hidden))).ratingsAllowed).isFalse()
+        assertThat(preparer.assembleLive(VIDEO_ID, null, extraction(hidden, isLive = true)).ratingsAllowed).isFalse()
+    }
+
+    @Test
+    fun `an ended stream's real start becomes its exact date`() {
+        val base = vodStep().result.playerResponse
+        val streamed =
+            base.copy(
+                videoDetails = base.videoDetails!!.copy(isLiveContent = true, isLive = false),
+                microformat =
+                    PlayerResponse.Microformat(
+                        PlayerResponse.Microformat.PlayerMicroformatRenderer(
+                            liveBroadcastDetails =
+                                PlayerResponse.Microformat.PlayerMicroformatRenderer.LiveBroadcastDetails(
+                                    isLiveNow = false,
+                                    startTimestamp = "2026-09-15T23:00:27+00:00",
+                                    endTimestamp = "2026-09-16T01:12:03+00:00",
+                                ),
+                        ),
+                    ),
+            )
+
+        val streams = preparer.assembleVod(VIDEO_ID, cachedVideo(), vodStep().copy(result = extraction(streamed)))
+
+        assertThat(streams.isArchivedLivestream).isTrue()
+        assertThat(streams.identity.enrichedVideo.timestamp).isEqualTo(1_789_513_227_000L)
+        assertThat(streams.identity.enrichedVideo.timestampIsExact).isTrue()
+    }
+
+    @Test
+    fun `without broadcast details the date stays as it was`() {
+        val streams = preparer.assembleVod(VIDEO_ID, cachedVideo(), vodStep())
+
+        assertThat(streams.isArchivedLivestream).isFalse()
+        assertThat(streams.identity.enrichedVideo.timestampIsExact).isFalse()
     }
 
     private fun cachedVideo(): Video =

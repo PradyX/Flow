@@ -68,6 +68,8 @@ class LanLink internal constructor(
     val peerPort: Int?,
     private val sendKey: ByteArray,
     private val receiveKey: ByteArray,
+    /** The connecting device was removed and hasn't read it yet, so it gets the roster only (spec/live.md, LAN groups). */
+    val peerRemoved: Boolean = false,
 ) {
     private val sending = Mutex()
     private var sent = 0L
@@ -129,15 +131,28 @@ internal suspend fun SyncConnection.receiveHello(): ByteArray? =
 private fun Session.memberKey(did: String): ByteArray =
     state.members[did]?.takeIf { it.role == Role.DEVICE && did != me }?.sig ?: reject(ProtocolError.SENDER)
 
+/** The signing key of a device this one has seen removed, when it was a device in [epoch], the epoch of its hello. */
+private fun Session.removedKey(
+    did: String,
+    epoch: Int,
+): ByteArray? {
+    if (did in state.members) return null
+    val sender = state.senders[did]?.takeIf { it.role == Role.DEVICE } ?: return null
+    val until = sender.until ?: return null
+    return sender.sig.takeIf { epoch in sender.since..until }
+}
+
 /**
  * The connecting side: hello sealed under [epoch], naming the [port] this device listens on.
- * [LinkedException.LanUnreachable] when the member closes without answering.
+ * [LinkedException.LanUnreachable] when the member closes without answering. With [removed], the
+ * answer must come from a device this one removed, which gets the roster only (spec/live.md, Removing).
  */
 suspend fun connectLink(
     connection: SyncConnection,
     session: Session,
     port: Int? = null,
     epoch: Int = session.state.epoch,
+    removed: Boolean = false,
 ): LanLink {
     val lanKey = purposeKey(session.epochKey(epoch), session.group, epoch, Purpose.LAN)
     val clientNonce = SyncCrypto.randomBytes(NONCE_SIZE)
@@ -159,7 +174,7 @@ suspend fun connectLink(
 
     val second = opened(connection.receiveHello() ?: throw LinkedException.LanUnreachable(), lanKey, 2)
     val serverDid = second.field("did")
-    val serverKey = session.memberKey(serverDid)
+    val serverKey = if (removed) session.removedKey(serverDid, epoch) ?: reject(ProtocolError.SENDER) else session.memberKey(serverDid)
     val server = SyncBytes.fromHex(serverDid)
     val serverNonce = second.nonce()
     val transcript = lanTranscript(LanRole.SERVER, clientNonce, serverNonce, client, server)
@@ -168,7 +183,7 @@ suspend fun connectLink(
     val proof = sign(session.device.sigSeed, lanTranscript(LanRole.CLIENT, clientNonce, serverNonce, client, server))
     connection.send(hello(epoch, lanKey, 3, JsonObject(mapOf("sig" to JsonPrimitive(SyncBytes.b64urlEncode(proof))))))
     val keys = lanSessionKeys(lanKey, clientNonce, serverNonce, client, server)
-    return LanLink(connection, serverDid, null, keys.clientToServer, keys.serverToClient)
+    return LanLink(connection, serverDid, null, keys.clientToServer, keys.serverToClient, peerRemoved = removed)
 }
 
 /**
@@ -178,13 +193,14 @@ suspend fun connectLink(
 suspend fun dialLink(
     session: Session,
     port: Int?,
+    removed: Boolean = false,
     connect: suspend () -> SyncConnection?,
 ): LanLink? {
     var epoch = session.state.epoch
     repeat(DIAL_ATTEMPTS) {
         val connection = connect() ?: return null
         try {
-            return connectLink(connection, session, port, epoch)
+            return connectLink(connection, session, port, epoch, removed)
         } catch (_: LinkedException.LanUnreachable) {
             connection.close()
             if (epoch == 0) return null
@@ -199,7 +215,8 @@ suspend fun dialLink(
 
 /**
  * The accepting side: answers the hello in [first] under the epoch the client named, if this device holds its key.
- * [first] is the connection's first frame, read here unless the caller already has it.
+ * [first] is the connection's first frame, read here unless the caller already has it. A client this device removed
+ * is answered too, and its link is [LanLink.peerRemoved].
  */
 suspend fun acceptLink(
     connection: SyncConnection,
@@ -212,7 +229,8 @@ suspend fun acceptLink(
     val lanKey = purposeKey(session.epochKey(epoch), session.group, epoch, Purpose.LAN)
     val hello = opened(opening, lanKey, 1)
     val clientDid = hello.field("did")
-    val clientKey = session.memberKey(clientDid)
+    val removedKey = session.removedKey(clientDid, epoch)
+    val clientKey = removedKey ?: session.memberKey(clientDid)
     val client = SyncBytes.fromHex(clientDid)
     val clientNonce = hello.nonce()
     val serverNonce = SyncCrypto.randomBytes(NONCE_SIZE)
@@ -232,5 +250,12 @@ suspend fun acceptLink(
     val transcript = lanTranscript(LanRole.CLIENT, clientNonce, serverNonce, client, server)
     if (!verify(clientKey, transcript, third.signature())) reject(ProtocolError.SIGNATURE)
     val keys = lanSessionKeys(lanKey, clientNonce, serverNonce, client, server)
-    return LanLink(connection, clientDid, (hello["p"] as? JsonPrimitive)?.intOrNull, keys.serverToClient, keys.clientToServer)
+    return LanLink(
+        connection,
+        clientDid,
+        (hello["p"] as? JsonPrimitive)?.intOrNull,
+        keys.serverToClient,
+        keys.clientToServer,
+        peerRemoved = removedKey != null,
+    )
 }

@@ -89,6 +89,36 @@ class PostAttachmentTest {
     }
 
     @Test
+    fun `an image poll keeps each choice's picture`() {
+        val parsed =
+            attachment(
+                """
+                { "pollRenderer": {
+                  "choices": [
+                    { "text": { "runs": [ { "text": "Sage" } ] },
+                      "image": { "thumbnails": [
+                        { "url": "https://yt3.test/sage-small.jpg", "width": 88, "height": 88 },
+                        { "url": "https://yt3.test/sage-large.jpg", "width": 400, "height": 400 } ] } },
+                    { "text": { "runs": [ { "text": "Lilac" } ] },
+                      "image": { "thumbnails": [ { "url": "https://yt3.test/lilac.jpg", "width": 400, "height": 400 } ] } }
+                  ],
+                  "totalVotes": { "simpleText": "31K votes" }
+                } }
+                """.trimIndent(),
+            )
+
+        val poll = parsed as PostAttachment.Poll
+        assertEquals(listOf("https://yt3.test/sage-large.jpg", "https://yt3.test/lilac.jpg"), poll.choices.map { it.imageUrl })
+    }
+
+    @Test
+    fun `a text poll has no pictures`() {
+        val parsed = attachment("""{ "pollRenderer": { "choices": [ { "text": { "runs": [ { "text": "Yes" } ] } } ] } }""")
+
+        assertNull((parsed as PostAttachment.Poll).choices.single().imageUrl)
+    }
+
+    @Test
     fun `a poll without ratios still parses its choices`() {
         val parsed =
             attachment(
@@ -119,6 +149,33 @@ class PostAttachmentTest {
         assertEquals("IA9LlfQ9X-Q", video.id)
         assertEquals(1304, video.duration)
         assertEquals(1_800_000L, video.viewCount)
+    }
+
+    @Test
+    fun `a shared playlist keeps its id, title, cover and count`() {
+        val parsed =
+            attachment(
+                """
+                { "playlistRenderer": {
+                  "playlistId": "PLsynthetic01",
+                  "title": { "simpleText": "Bench builds" },
+                  "videoCount": "12",
+                  "thumbnails": [ { "thumbnails": [ { "url": "https://i.ytimg.test/p.jpg", "width": 480, "height": 270 } ] } ],
+                  "thumbnail": { "thumbnails": [ { "url": "https://i.ytimg.test/p.jpg", "width": 480, "height": 270 } ] }
+                } }
+                """.trimIndent(),
+            )
+
+        val playlist = (parsed as PostAttachment.SharedPlaylist).playlist
+        assertEquals("PLsynthetic01", playlist.id)
+        assertEquals("Bench builds", playlist.name)
+        assertEquals("https://i.ytimg.test/p.jpg", playlist.thumbnailUrl)
+        assertEquals(12, playlist.videoCount)
+    }
+
+    @Test
+    fun `a playlist without an id is not an attachment`() {
+        assertNull(attachment("""{ "playlistRenderer": { "title": { "simpleText": "No id" } } }"""))
     }
 
     @Test

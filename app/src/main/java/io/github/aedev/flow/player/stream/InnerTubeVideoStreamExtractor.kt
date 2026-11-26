@@ -1,6 +1,7 @@
 package io.github.aedev.flow.player.stream
 
 import android.net.Uri
+import android.os.SystemClock
 import android.util.Log
 import androidx.media3.common.util.UnstableApi
 import io.github.aedev.flow.innertube.YouTube
@@ -100,12 +101,14 @@ object InnerTubeVideoStreamExtractor {
             YouTubeClient.WEB,
         )
 
-    // ANDROID_VR leads: on a live broadcast it is the only client that returns a DASH manifest
-    // alongside the HLS one, and VISIONOS returns HLS only.
+    // Asked whatever their VOD demotion says: the wall that demotes them is bound to the byte offset
+    // of VOD files, and live segments are fetched whole. VISIONOS leads because its live response
+    // carries every format with a direct URL; ANDROID_VR's live HLS segments were refused with 403
+    // on 12 Nov.
     private val LIVE_MANIFEST_CLIENTS: List<YouTubeClient> =
         listOf(
-            YouTubeClient.ANDROID_VR_1_65_10,
             YouTubeClient.VISIONOS,
+            YouTubeClient.ANDROID_VR_1_65_10,
         )
 
     data class VideoExtractionResult(
@@ -118,6 +121,29 @@ object InnerTubeVideoStreamExtractor {
         val liveHlsUrl: String? = null,
         val liveDashUrl: String? = null,
     )
+
+    private val reusable =
+        ReusableExtractions(
+            identity = { WebPoTokenSession.identityGeneration },
+            isGated = ClientGateTracker::isGated,
+            nowMs = SystemClock::elapsedRealtime,
+        )
+
+    /**
+     * [extract] for the watch page: a kept extraction of [videoId] while it is still good, otherwise
+     * a fresh one, which is then kept for the next open. Never used for a forced-SABR or recovery
+     * load, which exist to replace URLs.
+     */
+    suspend fun extractForPage(videoId: String): VideoExtractionResult? {
+        reusable.get(videoId)?.let { kept ->
+            Log.d(TAG, "Reusing the kept extraction for $videoId (${kept.usedClient.clientName}); no client ladder")
+            return kept
+        }
+        return extract(videoId)?.also { reusable.store(videoId, it) }
+    }
+
+    /** Drops [videoId]'s kept extraction: its URLs were refused, or a recovery replaces them. */
+    fun forgetReusable(videoId: String) = reusable.forget(videoId)
 
     /**
      * @param audioOnly the caller plays only [VideoExtractionResult.audioFormats], so a capped
@@ -146,6 +172,7 @@ object InnerTubeVideoStreamExtractor {
             dropGatesOnIdentityChange()
             blockedVideoIds.remove(videoId)
             goneVideoIds.remove(videoId)
+            refusals.remove(videoId)
             if (forceSabr) {
                 val failureReasons = mutableListOf<String>()
                 trySabrClients(videoId, failureReasons)?.let {
@@ -165,10 +192,10 @@ object InnerTubeVideoStreamExtractor {
 
             // A wall at /player issues no stream URLs, so no 403 ever reaches the re-roll that GVS
             // refusals trigger, and a retry would ask again with the same walled visitor (#1354).
-            val fullWall = PlayabilityVerdict.everyClientWalled(failureReasons)
-            val reroll = if (fullWall) WebPoTokenSession.rerollAfterPlayerWall(walledGeneration) else null
+            val walled = PlayabilityVerdict.wallExplains(failureReasons)
+            val reroll = if (walled) WebPoTokenSession.rerollAfterPlayerWall(walledGeneration) else null
             if (reroll == PlayerWallReroll.REROLLED) {
-                PlayerDiagnostics.logWarning(TAG, "every client bot-walled $videoId, retrying once with a fresh visitor")
+                PlayerDiagnostics.logWarning(TAG, "bot wall on $videoId, retrying once with a fresh visitor")
                 dropGatesOnIdentityChange()
                 failureReasons = mutableListOf()
                 walkLadder(videoId, audioOnly, failureReasons)?.let { return@withContext it }
@@ -177,7 +204,7 @@ object InnerTubeVideoStreamExtractor {
 
             Log.e(TAG, "All clients failed for $videoId (forceSabr=$forceSabr). Reasons: ${failureReasons.joinToString(" | ")}")
             PlayerDiagnostics.logError(TAG, "ALL clients failed $videoId: ${failureReasons.joinToString(" | ")}")
-            if (PlayabilityVerdict.everyClientWalled(failureReasons)) {
+            if (PlayabilityVerdict.wallExplains(failureReasons)) {
                 PlayerDiagnostics.logError(TAG, "bot wall $videoId: ${WebPoTokenSession.identitySummary()} freshWalled=$freshVisitorWalled")
             }
             if (PlayabilityVerdict.isGone(failureReasons)) goneVideoIds += videoId
@@ -208,7 +235,7 @@ object InnerTubeVideoStreamExtractor {
             )
             // The walled visitor's other app clients and token-backed web clients stop at the
             // same minute; TV_TIZEN is the measured way past it (#921).
-            TizenStreamResolver.resolve(videoId, failureReasons)?.let {
+            TizenStreamResolver.resolve(videoId, failureReasons, liveDetected)?.let {
                 Log.w(TAG, "Extraction OK for $videoId via TV_TIZEN (mode=DIRECT/walled)")
                 PlayerDiagnostics.logWarning(TAG, "extract OK $videoId via TV_TIZEN mode=DIRECT/walled")
                 return it
@@ -233,6 +260,7 @@ object InnerTubeVideoStreamExtractor {
         if (liveDetected[0]) {
             tryLiveClients(videoId, failureReasons)?.let {
                 Log.w(TAG, "Live manifest for $videoId via ${it.usedClient.clientName} (live-clients)")
+                PlayerDiagnostics.logWarning(TAG, "extract OK $videoId via ${it.usedClient.clientName} mode=LIVE/live-clients")
                 return it
             }
         }
@@ -241,6 +269,15 @@ object InnerTubeVideoStreamExtractor {
         // direct client because it is the only other path whose token Flow can actually mint —
         // the clients below it are all served unattested and can be cut off mid-playback.
         trySabrClients(videoId, failureReasons)?.let {
+            // Flow's SABR session plays a broadcast as a fixed-length video, so the live clients
+            // get the first go even when this answer is the first to say the video is live.
+            if (!liveDetected[0] && it.playerResponse.videoDetails?.isLive == true) {
+                liveDetected[0] = true
+                tryLiveClients(videoId, failureReasons)?.let { live ->
+                    PlayerDiagnostics.logWarning(TAG, "extract OK $videoId via ${live.usedClient.clientName} mode=LIVE/after-sabr")
+                    return live
+                }
+            }
             Log.w(TAG, "Extraction OK for $videoId via ${it.usedClient.clientName} (mode=SABR)")
             PlayerDiagnostics.logWarning(TAG, "extract OK $videoId mode=SABR (durable) via ${it.usedClient.clientName}")
             return if (liveDetected[0] && !it.isLive) it.copy(isLive = true) else it
@@ -311,12 +348,29 @@ object InnerTubeVideoStreamExtractor {
     /** Why the last extraction of [videoId] failed, when YouTube refused the viewer rather than the video. */
     fun blockOf(videoId: String): PlaybackBlock? = blockedVideoIds[videoId]
 
+    private val refusals = java.util.concurrent.ConcurrentHashMap<String, YouTubeRefusal>()
+
+    /** What YouTube said about [videoId] when its last extraction failed, in its own terms. */
+    fun refusalOf(videoId: String): YouTubeRefusal? = refusals[videoId]
+
+    private val promotedHandoff = ExtractionHandoff { System.nanoTime() / 1_000_000 }
+
+    /** Offers the extraction behind a preloaded window the player just advanced into. */
+    internal fun handOffPromoted(
+        videoId: String,
+        result: VideoExtractionResult,
+    ) = promotedHandoff.offer(videoId, result)
+
+    /** The promoted window's extraction, once, when [videoId] is the video that was promoted. */
+    internal fun takePromoted(videoId: String): VideoExtractionResult? = promotedHandoff.take(videoId)
+
     private fun recordBlock(
         videoId: String,
         failureReasons: List<String>,
         freshVisitorWalled: Boolean = false,
     ) {
         PlayabilityVerdict.block(failureReasons, freshVisitorWalled)?.let { blockedVideoIds[videoId] = it }
+        PlayabilityVerdict.refusalOf(failureReasons)?.let { refusals[videoId] = it }
     }
 
     /** The clients GVS is not currently refusing to serve. See [ClientGateTracker]. */
@@ -683,7 +737,11 @@ object InnerTubeVideoStreamExtractor {
                 Log.w(TAG, "$label+SABR: no visitorData available")
                 return null
             }
-            val poToken = WebPoTokenSession.mintForVisitorData(videoId, visitorData)
+            val (poToken, liveClient) =
+                coroutineScope {
+                    val live = async { YouTube.liveWebClient(client) }
+                    WebPoTokenSession.mintForVisitorData(videoId, visitorData) to live.await()
+                }
             if (poToken == null) {
                 failureReasons.add("$label: PoToken unavailable (WebView missing/broken?)")
                 Log.w(TAG, "$label+SABR: PoToken mint returned null (WebView missing/broken?)")
@@ -702,7 +760,7 @@ object InnerTubeVideoStreamExtractor {
                             locale = YouTubeLocale.EXTRACTION,
                             cpn = cpn,
                             reloadToken = reloadToken,
-                            client = client,
+                            client = liveClient,
                         ).getOrNull()
                 }
             if (playerResponse == null) {
@@ -716,7 +774,7 @@ object InnerTubeVideoStreamExtractor {
                 val refusal = PlayabilityVerdict.refusal(playerResponse.playabilityStatus, playerResponse.videoDetails != null)
                 failureReasons.add("$label: $refusal")
                 Log.w(TAG, "$label: $refusal")
-                PlayerDiagnostics.logWarning(TAG, "skip $label v${client.clientVersion}: $refusal pot=true")
+                PlayerDiagnostics.logWarning(TAG, "skip $label v${liveClient.clientVersion}: $refusal pot=true")
                 return null
             }
 
@@ -779,9 +837,9 @@ object InnerTubeVideoStreamExtractor {
             // same client that minted this response.
             val sabrInfo =
                 withTransformedN.copy(
-                    clientNameId = SabrClientIdentity.clientNameId(client),
-                    clientVersion = client.clientVersion,
-                    clientUserAgent = client.userAgent,
+                    clientNameId = SabrClientIdentity.clientNameId(liveClient),
+                    clientVersion = liveClient.clientVersion,
+                    clientUserAgent = liveClient.userAgent,
                 )
 
             // The SABR session is the point of this path, but these formats are what playback falls
@@ -833,7 +891,7 @@ object InnerTubeVideoStreamExtractor {
                 videoFormats = videoFormats,
                 audioFormats = audioFormats,
                 playerResponse = playerResponse,
-                usedClient = client,
+                usedClient = liveClient,
                 sabrInfo = sabrInfo,
             )
         } catch (e: CancellationException) {

@@ -5,18 +5,15 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.MediaSource
 import com.google.common.truth.Truth.assertThat
-import io.github.aedev.flow.data.model.Video
-import io.github.aedev.flow.player.stream.ResolvedStreamData
+import io.github.aedev.flow.player.stream.model.StreamType
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
-import org.schabi.newpipe.extractor.stream.StreamType
 
 /**
  * Preloading is what makes advancing to the next video gapless, and every one of its guards exists
@@ -27,89 +24,12 @@ import org.schabi.newpipe.extractor.stream.StreamType
 @UnstableApi
 @OptIn(ExperimentalCoroutinesApi::class)
 class GaplessPreloadControllerTest {
-    private fun video(id: String) =
-        Video(
-            id = id,
-            title = "Video $id",
-            channelName = "Channel",
-            channelId = "UC123",
-            thumbnailUrl = "https://example.test/$id.jpg",
-            duration = 120,
-            viewCount = 10L,
-            uploadDate = "today",
-        )
-
-    private fun resolved(
-        id: String,
-        streamType: StreamType? = StreamType.VIDEO_STREAM,
-    ) = ResolvedStreamData(
-        enrichedVideo = video(id),
-        videoStream = null,
-        audioStream = null,
-        videoStreams = emptyList(),
-        audioStreams = emptyList(),
-        subtitles = emptyList(),
-        durationSeconds = 120L,
-        dashManifestUrl = null,
-        streamType = streamType,
-        relatedVideos = emptyList(),
-        preferredCodec = "avc",
-        itVideoFormats = emptyList(),
-        itAudioFormats = emptyList(),
-    )
-
-    private fun playerWith(
-        mediaItemCount: Int = 1,
-        currentIndex: Int = 0,
-    ): ExoPlayer =
-        mockk(relaxed = true) {
-            every { getMediaItemCount() } returns mediaItemCount
-            every { getCurrentMediaItem() } returns mockk<MediaItem>()
-            every { getCurrentMediaItemIndex() } returns currentIndex
-        }
-
-    /** Wires a controller whose dependencies are all overridable per test. */
-    private class Harness(
-        val scope: CoroutineScope,
-        val player: ExoPlayer? = null,
-        var currentVideoId: String? = "current",
-        var target: PreloadTarget? = null,
-        var isLooping: Boolean = false,
-        var isLive: Boolean = false,
-        val resolve: suspend (Video) -> ResolvedStreamData? = { null },
-        val source: MediaSource? = mockk(relaxed = true),
-        val downloaded: Set<String> = emptySet(),
-        val gone: Set<String> = emptySet(),
-    ) {
-        val logs = mutableListOf<String>()
-        var resolveCalls = 0
-
-        val controller =
-            GaplessPreloadController(
-                scope = scope,
-                player = { player },
-                context = { mockk(relaxed = true) },
-                currentVideoId = { currentVideoId },
-                nextTarget = { target },
-                isLooping = { isLooping },
-                isLiveStream = { isLive },
-                resolveStreams = { v, _ ->
-                    resolveCalls++
-                    resolve(v)
-                },
-                hasLocalCopy = { it.id in downloaded },
-                buildMediaSource = { _, _ -> source },
-                log = { logs += it },
-                isGone = { it in gone },
-            )
-    }
-
     @Test
     fun `a downloaded next video is not preloaded, so advance plays the file`() =
         runTest {
             val player = playerWith()
             val harness =
-                Harness(
+                PreloadHarness(
                     backgroundScope,
                     player = player,
                     target = PreloadTarget(video("next"), fromQueue = true),
@@ -130,7 +50,7 @@ class GaplessPreloadControllerTest {
         runTest {
             val player = playerWith()
             val harness =
-                Harness(
+                PreloadHarness(
                     backgroundScope,
                     player = player,
                     target = PreloadTarget(video("next"), fromQueue = true),
@@ -162,7 +82,7 @@ class GaplessPreloadControllerTest {
                     every { addMediaSource(any<MediaSource>()) } answers { windows = 2 }
                 }
             val harness =
-                Harness(
+                PreloadHarness(
                     backgroundScope,
                     player = player,
                     target = PreloadTarget(video("next"), fromQueue = false),
@@ -183,7 +103,7 @@ class GaplessPreloadControllerTest {
     fun `looping never preloads, because the same video repeats`() =
         runTest {
             val harness =
-                Harness(
+                PreloadHarness(
                     backgroundScope,
                     player = playerWith(),
                     target = PreloadTarget(video("next"), fromQueue = false),
@@ -202,7 +122,7 @@ class GaplessPreloadControllerTest {
     fun `a live stream is never preloaded`() =
         runTest {
             val harness =
-                Harness(
+                PreloadHarness(
                     backgroundScope,
                     player = playerWith(),
                     target = PreloadTarget(video("next"), fromQueue = false),
@@ -221,7 +141,7 @@ class GaplessPreloadControllerTest {
         runTest {
             val player = playerWith()
             val harness =
-                Harness(
+                PreloadHarness(
                     backgroundScope,
                     player = player,
                     target = PreloadTarget(video("next"), fromQueue = false),
@@ -240,7 +160,7 @@ class GaplessPreloadControllerTest {
         runTest {
             val player = playerWith(mediaItemCount = 2)
             val harness =
-                Harness(
+                PreloadHarness(
                     backgroundScope,
                     player = player,
                     target = PreloadTarget(video("next"), fromQueue = false),
@@ -258,7 +178,7 @@ class GaplessPreloadControllerTest {
     fun `nothing is preloaded while no video is playing`() =
         runTest {
             val harness =
-                Harness(
+                PreloadHarness(
                     backgroundScope,
                     player = playerWith(),
                     currentVideoId = null,
@@ -276,7 +196,7 @@ class GaplessPreloadControllerTest {
     fun `a failed attempt does not block later ones for the same video`() =
         runTest {
             val harness =
-                Harness(
+                PreloadHarness(
                     backgroundScope,
                     player = playerWith(),
                     target = PreloadTarget(video("next"), fromQueue = false),
@@ -301,7 +221,7 @@ class GaplessPreloadControllerTest {
         runTest {
             val player = playerWith()
             val harness =
-                Harness(
+                PreloadHarness(
                     backgroundScope,
                     player = player,
                     target = PreloadTarget(video("next"), fromQueue = false),
@@ -322,6 +242,9 @@ class GaplessPreloadControllerTest {
                     },
                     hasLocalCopy = { false },
                     buildMediaSource = { _, _ -> mockk(relaxed = true) },
+                    isForegroundVideo = { false },
+                    isDataSaverOn = { false },
+                    nextVideoPreload = { ExoPlayer.PreloadConfiguration.DEFAULT },
                     log = {},
                 )
 
@@ -336,7 +259,7 @@ class GaplessPreloadControllerTest {
     fun `a failed resolve is retried and eventually given up on`() =
         runTest {
             val harness =
-                Harness(
+                PreloadHarness(
                     backgroundScope,
                     player = playerWith(),
                     target = PreloadTarget(video("next"), fromQueue = false),
@@ -361,7 +284,7 @@ class GaplessPreloadControllerTest {
     fun `a next video YouTube removed is not retried`() =
         runTest {
             val harness =
-                Harness(
+                PreloadHarness(
                     backgroundScope,
                     player = playerWith(),
                     target = PreloadTarget(video("next"), fromQueue = false),
@@ -382,7 +305,7 @@ class GaplessPreloadControllerTest {
         runTest {
             val player = playerWith(mediaItemCount = 1)
             val harness =
-                Harness(
+                PreloadHarness(
                     backgroundScope,
                     player = player,
                     target = PreloadTarget(video("first"), fromQueue = false),
@@ -412,7 +335,7 @@ class GaplessPreloadControllerTest {
         runTest {
             val player = playerWith()
             val harness =
-                Harness(
+                PreloadHarness(
                     backgroundScope,
                     player = player,
                     target = PreloadTarget(video("next"), fromQueue = true),
@@ -435,7 +358,7 @@ class GaplessPreloadControllerTest {
         runTest {
             val player = playerWith()
             val harness =
-                Harness(
+                PreloadHarness(
                     backgroundScope,
                     player = player,
                     target = PreloadTarget(video("next"), fromQueue = false),

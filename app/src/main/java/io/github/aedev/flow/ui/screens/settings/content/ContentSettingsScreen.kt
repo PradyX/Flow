@@ -10,6 +10,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.aedev.flow.R
+import io.github.aedev.flow.data.local.FeedAutoplay
 import io.github.aedev.flow.data.local.SharedLinkAction
 import io.github.aedev.flow.data.local.WatchedThreshold
 import io.github.aedev.flow.ui.components.settings.SettingsDestination
@@ -37,15 +38,19 @@ internal fun ContentSettingsScreen(
 ) {
     val shortsContent by viewModel.shortsContent.collectAsStateWithLifecycle()
     val channelShortsTab by viewModel.channelShortsTab.collectAsStateWithLifecycle()
+    val subsAllChip by viewModel.subsAllChip.collectAsStateWithLifecycle()
+    val subsHasGroupChip by viewModel.subsHasGroupChip.collectAsStateWithLifecycle()
     val hideWatchedHome by viewModel.hideWatchedHome.collectAsStateWithLifecycle()
     val hideWatchedSubs by viewModel.hideWatchedSubs.collectAsStateWithLifecycle()
     val hideWatchedShorts by viewModel.hideWatchedShorts.collectAsStateWithLifecycle()
+    val hideWatchedSuggestions by viewModel.hideWatchedSuggestions.collectAsStateWithLifecycle()
     val removeWatchedWatchLater by viewModel.removeWatchedWatchLater.collectAsStateWithLifecycle()
     val notes by viewModel.notes.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val linkHandlingLabel = rememberLinkHandlingLabel()
     var showThresholdDialog by rememberSaveable { mutableStateOf(false) }
     var showSharedLinksDialog by rememberSaveable { mutableStateOf(false) }
+    var showFeedAutoplayDialog by rememberSaveable { mutableStateOf(false) }
 
     SettingsPage(
         title = stringResource(R.string.settings_content_title),
@@ -55,6 +60,10 @@ internal fun ContentSettingsScreen(
         group(key = "content.home", header = R.string.settings_section_home) {
             switch(ContentIndex.homeFeed, viewModel.homeFeed, viewModel::setHomeFeed)
             switch(ContentIndex.refreshOnReselect, viewModel.refreshOnReselect, viewModel::setRefreshOnReselect)
+            choice(ContentIndex.feedAutoplay, onClick = { showFeedAutoplayDialog = true }) {
+                val mode by viewModel.feedAutoplay.collectAsStateWithLifecycle()
+                feedAutoplayLabel(mode)
+            }
             switch(ContentIndex.homeChips, viewModel.homeChips, viewModel::setHomeChips)
             switch(ContentIndex.homeNewVideosButton, viewModel.homeNewVideosButton, viewModel::setHomeNewVideosButton)
             switch(ContentIndex.continueWatching, viewModel.continueWatching, viewModel::setContinueWatching)
@@ -82,6 +91,16 @@ internal fun ContentSettingsScreen(
             switch(ContentIndex.subsUpcoming, viewModel.subsUpcoming, viewModel::setSubsUpcoming)
             switch(ContentIndex.subsCollaborations, viewModel.subsCollaborations, viewModel::setSubsCollaborations)
             switch(ContentIndex.subsPostsChip, viewModel.subsPostsChip, viewModel::setSubsPostsChip)
+            row(ContentIndex.subsAllChip.key) { shape ->
+                FlowSwitchRow(
+                    title = stringResource(ContentIndex.subsAllChip.title),
+                    supportingText = stringResource(R.string.content_settings_subs_all_chip_subtitle),
+                    checked = subsAllChip || !subsHasGroupChip,
+                    onCheckedChange = viewModel::setSubsAllChip,
+                    enabled = subsHasGroupChip,
+                    shape = shape,
+                )
+            }
             switch(ContentIndex.subsUngrouped, viewModel.subsUngrouped, viewModel::setSubsUngrouped)
             switch(ContentIndex.hideWatchedSubs, viewModel.hideWatchedSubs, viewModel::setHideWatchedSubs)
             switch(ContentIndex.hideUnplayableSubs, viewModel.hideUnplayableSubs, viewModel::setHideUnplayableSubs)
@@ -106,7 +125,8 @@ internal fun ContentSettingsScreen(
             switch(ContentIndex.removeWatchedWatchLater, viewModel.removeWatchedWatchLater, viewModel::setRemoveWatchedWatchLater)
         }
         group(key = "content.watched", header = R.string.settings_section_watched) {
-            if (hideWatchedHome || hideWatchedSubs || hideWatchedShorts || removeWatchedWatchLater) {
+            switch(ContentIndex.hideWatchedSuggestions, viewModel.hideWatchedSuggestions, viewModel::setHideWatchedSuggestions)
+            if (hideWatchedHome || hideWatchedSubs || hideWatchedShorts || hideWatchedSuggestions || removeWatchedWatchLater) {
                 choice(ContentIndex.watchedThreshold, onClick = { showThresholdDialog = true }) {
                     val threshold by viewModel.watchedThreshold.collectAsStateWithLifecycle()
                     watchedThresholdLabel(threshold)
@@ -149,6 +169,18 @@ internal fun ContentSettingsScreen(
         )
     }
 
+    if (showFeedAutoplayDialog) {
+        val mode by viewModel.feedAutoplay.collectAsStateWithLifecycle()
+        FlowChoiceDialog(
+            title = stringResource(R.string.content_settings_feed_autoplay_title),
+            description = stringResource(R.string.content_settings_feed_autoplay_dialog_body),
+            options = FeedAutoplay.entries.map { FlowChoice(it, feedAutoplayLabel(it)) },
+            selected = mode,
+            onSelect = viewModel::setFeedAutoplay,
+            onDismiss = { showFeedAutoplayDialog = false },
+        )
+    }
+
     if (showSharedLinksDialog) {
         val action by viewModel.sharedLinkAction.collectAsStateWithLifecycle()
         FlowChoiceDialog(
@@ -161,6 +193,14 @@ internal fun ContentSettingsScreen(
         )
     }
 }
+
+@Composable
+private fun feedAutoplayLabel(mode: FeedAutoplay): String =
+    when (mode) {
+        FeedAutoplay.OFF -> stringResource(R.string.content_settings_feed_autoplay_off)
+        FeedAutoplay.WIFI_ONLY -> stringResource(R.string.content_settings_feed_autoplay_wifi)
+        FeedAutoplay.ALWAYS -> stringResource(R.string.content_settings_feed_autoplay_always)
+    }
 
 @Composable
 private fun sharedLinkActionLabel(action: SharedLinkAction): String =

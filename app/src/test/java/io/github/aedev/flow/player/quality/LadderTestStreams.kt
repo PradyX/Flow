@@ -3,7 +3,7 @@ package io.github.aedev.flow.player.quality
 import io.github.aedev.flow.innertube.models.response.PlayerResponse.StreamingData.Format
 import io.github.aedev.flow.innertube.models.response.PlayerResponse.StreamingData.Format.Range
 import io.github.aedev.flow.player.stream.InnerTubeStreamBridge
-import org.schabi.newpipe.extractor.stream.VideoStream
+import io.github.aedev.flow.player.stream.model.VideoStream
 
 internal object LadderTestStreams {
     private val H264_ITAGS = mapOf(144 to 160, 240 to 133, 360 to 134, 480 to 135, 720 to 136, 1080 to 137)
@@ -21,7 +21,13 @@ internal object LadderTestStreams {
         bitrate: Int,
         hdr: Boolean = false,
     ) = if (hdr) {
-        stream(height, bitrate, "video/webm; codecs=\"vp09.02.51.10.01.09.16.09.00\"", VP9_HDR_ITAGS.getValue(height))
+        stream(
+            height,
+            bitrate,
+            "video/webm; codecs=\"vp09.02.51.10.01.09.16.09.00\"",
+            VP9_HDR_ITAGS.getValue(height),
+            label = "${height}p HDR",
+        )
     } else {
         stream(height, bitrate, "video/webm; codecs=\"vp09.00.40.08\"", VP9_ITAGS.getValue(height))
     }
@@ -32,6 +38,7 @@ internal object LadderTestStreams {
         mimeType: String,
         itag: Int,
         ranged: Boolean = true,
+        label: String = "${height}p",
     ): VideoStream {
         val format =
             Format(
@@ -44,7 +51,7 @@ internal object LadderTestStreams {
                 contentLength = 9_000_000L,
                 quality = "q$height",
                 fps = 30,
-                qualityLabel = "${height}p",
+                qualityLabel = label,
                 averageBitrate = bitrate,
                 audioQuality = null,
                 approxDurationMs = "212000",

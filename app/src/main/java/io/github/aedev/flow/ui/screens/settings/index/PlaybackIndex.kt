@@ -101,6 +101,14 @@ internal object PlaybackIndex {
             section = R.string.playback_header,
             destination = page,
         )
+    val pauseVideoWhenMuted =
+        SettingEntry(
+            key = "playback.pause_video_when_muted",
+            title = R.string.settings_pause_video_muted_title,
+            summary = R.string.settings_pause_music_muted_summary,
+            section = R.string.playback_header,
+            destination = page,
+        )
     val rememberSpeed =
         SettingEntry(
             key = "playback.remember_speed",
@@ -319,6 +327,15 @@ internal object PlaybackIndex {
             section = R.string.settings_section_watch_page,
             destination = page,
         )
+    val relatedCollections =
+        SettingEntry(
+            key = "playback.related_collections",
+            title = R.string.settings_related_collections_title,
+            summary = R.string.settings_related_collections_subtitle,
+            keywords = R.string.settings_keywords_related_collections,
+            section = R.string.settings_section_watch_page,
+            destination = page,
+        )
     val relatedCardStyle =
         SettingEntry(
             key = "playback.related_card_style",
@@ -446,6 +463,7 @@ internal object PlaybackIndex {
             loopAll,
             skipSilence,
             playDuringCalls,
+            pauseVideoWhenMuted,
             normalizeVolume,
             rememberSpeed,
             musicNormalSpeed,
@@ -476,6 +494,7 @@ internal object PlaybackIndex {
                 subtitleLanguage,
                 autoCaptions,
                 relatedVideos,
+                relatedCollections,
                 relatedCardStyle,
                 titleLines,
                 comments,

@@ -12,6 +12,7 @@ import io.github.aedev.flow.data.local.DoubleTapSeekZone
 import io.github.aedev.flow.data.local.FullscreenSidePanelWidth
 import io.github.aedev.flow.data.local.GestureOverlayStyle
 import io.github.aedev.flow.data.local.HomeFeedColumns
+import io.github.aedev.flow.data.local.IdleProgressBar
 import io.github.aedev.flow.data.local.PlayerPreferences
 import io.github.aedev.flow.data.local.PlayerRelatedCardStyle
 import io.github.aedev.flow.data.local.SpeedSwipeSide
@@ -56,7 +57,9 @@ internal class VideoPlayerPreferencesState(
     val ambientImmersiveEnabled: Boolean,
     val ambientImmersiveScrollDim: Boolean,
     val ambientGlowInBatterySaver: Boolean,
+    val ambientResponsive: Boolean,
     val adaptivePlayerSizeEnabled: Boolean,
+    val idleProgressBar: IdleProgressBar,
     val playerScrollAwayEnabled: Boolean,
     val groupedQualitySelectorEnabled: Boolean,
     val lockModeEnabled: Boolean,
@@ -65,6 +68,7 @@ internal class VideoPlayerPreferencesState(
     val transcriptLanguage: String,
     val commentsPreviewEnabled: Boolean,
     val showRelatedVideos: Boolean,
+    val showRelatedCollections: Boolean,
     val relatedCardStyle: PlayerRelatedCardStyle,
     val feedColumns: HomeFeedColumns,
     val deArrowEnabled: Boolean,
@@ -106,7 +110,9 @@ internal fun rememberVideoPlayerPreferences(context: Context): VideoPlayerPrefer
     val ambientImmersiveEnabled by playerPreferences.videoAmbientImmersiveEnabled.collectAsState(initial = false)
     val ambientImmersiveScrollDim by playerPreferences.videoAmbientImmersiveScrollDim.collectAsState(initial = true)
     val ambientGlowInBatterySaver by playerPreferences.videoAmbientGlowInBatterySaver.collectAsState(initial = false)
+    val ambientResponsive by playerPreferences.videoAmbientResponsive.collectAsState(initial = false)
     val adaptivePlayerSizeEnabled by playerPreferences.adaptivePlayerSizeEnabled.collectAsState(initial = true)
+    val idleProgressBar by playerPreferences.idleProgressBar.collectAsState(initial = IdleProgressBar.ON_VIDEO)
     val playerScrollAwayEnabled by playerPreferences.playerScrollAwayEnabled.collectAsState(initial = false)
     val groupedQualitySelectorEnabled by playerPreferences.groupedQualitySelectorEnabled.collectAsState(initial = false)
     val lockModeEnabled by playerPreferences.overlayLockModeEnabled.collectAsState(initial = false)
@@ -117,6 +123,7 @@ internal fun rememberVideoPlayerPreferences(context: Context): VideoPlayerPrefer
         .collectAsState(initial = CaptionTrackResolver.NO_PREFERRED_LANGUAGE)
     val commentsPreviewEnabled by playerPreferences.commentsPreviewEnabled.collectAsState(initial = true)
     val showRelatedVideos by playerPreferences.showRelatedVideos.collectAsState(initial = true)
+    val showRelatedCollections by playerPreferences.showRelatedCollections.collectAsState(initial = true)
     val relatedCardStyle by playerPreferences.playerRelatedCardStyle.collectAsState(initial = PlayerRelatedCardStyle.FULL_WIDTH)
     val feedColumns by playerPreferences.homeFeedColumns.collectAsState(initial = HomeFeedColumns.AUTO)
     val deArrowEnabled by playerPreferences.deArrowEnabled.collectAsState(initial = false)
@@ -156,7 +163,9 @@ internal fun rememberVideoPlayerPreferences(context: Context): VideoPlayerPrefer
         ambientImmersiveEnabled = ambientImmersiveEnabled,
         ambientImmersiveScrollDim = ambientImmersiveScrollDim,
         ambientGlowInBatterySaver = ambientGlowInBatterySaver,
+        ambientResponsive = ambientResponsive,
         adaptivePlayerSizeEnabled = adaptivePlayerSizeEnabled,
+        idleProgressBar = idleProgressBar,
         playerScrollAwayEnabled = playerScrollAwayEnabled,
         groupedQualitySelectorEnabled = groupedQualitySelectorEnabled,
         lockModeEnabled = lockModeEnabled,
@@ -165,6 +174,7 @@ internal fun rememberVideoPlayerPreferences(context: Context): VideoPlayerPrefer
         transcriptLanguage = transcriptLanguage,
         commentsPreviewEnabled = commentsPreviewEnabled,
         showRelatedVideos = showRelatedVideos,
+        showRelatedCollections = showRelatedCollections,
         relatedCardStyle = relatedCardStyle,
         feedColumns = feedColumns,
         deArrowEnabled = deArrowEnabled,

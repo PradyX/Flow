@@ -25,10 +25,12 @@ import io.github.aedev.flow.applock.hideFromRecentsWhenAsked
 import io.github.aedev.flow.data.contentfilter.aislist.AiListRepository
 import io.github.aedev.flow.data.local.AppFontPreferences
 import io.github.aedev.flow.data.local.LocalDataManager
+import io.github.aedev.flow.data.local.WatchProgressStore
 import io.github.aedev.flow.data.playlist.PlaylistTransfer
 import io.github.aedev.flow.data.recommendation.FlowNeuroEngine
 import io.github.aedev.flow.data.repository.DeArrowRepository
 import io.github.aedev.flow.data.repository.OriginalTitleRepository
+import io.github.aedev.flow.data.translation.TextTranslator
 import io.github.aedev.flow.discord.DiscordPresenceRuntime
 import io.github.aedev.flow.platform.AppIconController
 import io.github.aedev.flow.platform.AppUiRoot
@@ -45,6 +47,7 @@ import io.github.aedev.flow.ui.IncomingIntents
 import io.github.aedev.flow.ui.IncomingLinks
 import io.github.aedev.flow.ui.components.shared.HardwareKeyboardState
 import io.github.aedev.flow.ui.components.shared.LocalHardwareKeyboard
+import io.github.aedev.flow.ui.components.shared.LocalTextTranslator
 import io.github.aedev.flow.ui.startup.FlowRoot
 import io.github.aedev.flow.ui.startup.SplashController
 import io.github.aedev.flow.ui.startup.ThemeSettings
@@ -74,6 +77,12 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var aiList: AiListRepository
+
+    @Inject
+    lateinit var watchProgress: WatchProgressStore
+
+    @Inject
+    lateinit var textTranslator: TextTranslator
 
     @Inject
     lateinit var lifecyclePlaybackPreferences: LifecyclePlaybackPreferences
@@ -211,7 +220,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch { dataManager.themeSettings(appFontPreferences).collect { storedTheme.value = it } }
 
         setContent {
-            CompositionLocalProvider(LocalHardwareKeyboard provides hardwareKeyboard) {
+            CompositionLocalProvider(LocalHardwareKeyboard provides hardwareKeyboard, LocalTextTranslator provides textTranslator) {
                 FlowRoot(
                     storedTheme = storedTheme,
                     links = links,
@@ -219,6 +228,7 @@ class MainActivity : ComponentActivity() {
                     originalTitles = originalTitles,
                     deArrow = deArrow,
                     aiList = aiList,
+                    watchProgress = watchProgress,
                     appIconController = appIconController,
                     appLock = appLock,
                     onUiRoot = { cachedAppUiRoot = it },
@@ -491,6 +501,10 @@ class MainActivity : ComponentActivity() {
             io.github.aedev.flow.player.shorts.ShortsPlayerPool
                 .getInstance()
         if (!shortsPool.isPlaying()) return
+        if (PictureInPictureHelper.systemEntersPipOnLeave()) {
+            pendingAutoPip = true
+            return
+        }
         enterPlayerPictureInPictureMode(
             aspectRatio = shortsPool.activeVideoAspectRatio() ?: PORTRAIT_REEL_ASPECT_RATIO,
             isPlaying = true,
@@ -500,7 +514,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        FlowCrashHandler.recordPhase("memory", "MainActivity.onTrimMemory level=$level")
         videoPlayerManager.get().handleMemoryPressure(
             trimLevel = level,
             videoVisible = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) || isInPictureInPictureMode,

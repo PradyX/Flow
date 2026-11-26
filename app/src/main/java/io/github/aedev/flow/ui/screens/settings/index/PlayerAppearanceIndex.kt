@@ -77,6 +77,14 @@ internal object PlayerAppearanceIndex {
             R.string.settings_section_music_player,
             revealVia = musicBackground.key,
         )
+    val lyricsOnCover =
+        entry(
+            "music_lyrics_on_cover",
+            R.string.player_appearance_lyrics_on_cover_title,
+            R.string.player_appearance_lyrics_on_cover_subtitle,
+            R.string.settings_section_music_player,
+            revealVia = musicBackground.key,
+        )
     val hideMusicArtwork =
         entry(
             "hide_music_artwork",
@@ -247,6 +255,13 @@ internal object PlayerAppearanceIndex {
             R.string.player_settings_glow_battery_saver_subtitle,
             R.string.settings_section_video_player,
         )
+    val ambientMotion =
+        entry(
+            "ambient_motion",
+            R.string.player_settings_ambient_motion,
+            R.string.player_settings_ambient_motion_subtitle,
+            R.string.settings_section_video_player,
+        )
     val videoArtworkColors =
         entry(
             "video_artwork_colors",
@@ -338,6 +353,7 @@ internal object PlayerAppearanceIndex {
             frameStep,
             musicBackground,
             followLightTheme,
+            lyricsOnCover,
             hideMusicArtwork,
             animatedArtwork,
             animatedArtworkWifiOnly,
@@ -365,6 +381,7 @@ internal object PlayerAppearanceIndex {
             immersiveGlow,
             immersiveScrollDim,
             glowInBatterySaver,
+            ambientMotion,
             videoArtworkColors,
             groupedQuality,
             paidPromotion,

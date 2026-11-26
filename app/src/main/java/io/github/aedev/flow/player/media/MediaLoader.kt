@@ -23,6 +23,7 @@ import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.extractor.DefaultExtractorsFactory
 import io.github.aedev.flow.R
+import io.github.aedev.flow.player.analytics.VideoStartupTrace
 import io.github.aedev.flow.player.cache.PlayerCacheManager
 import io.github.aedev.flow.player.config.PlayerConfig
 import io.github.aedev.flow.player.datasource.PlatformCaptionTransport
@@ -36,10 +37,10 @@ import io.github.aedev.flow.player.state.EnhancedPlayerState
 import io.github.aedev.flow.player.stream.ResolvedCaption
 import io.github.aedev.flow.player.stream.StreamProcessor
 import io.github.aedev.flow.player.stream.VideoCodecUtils
+import io.github.aedev.flow.player.stream.model.AudioStream
+import io.github.aedev.flow.player.stream.model.VideoStream
 import io.github.aedev.flow.player.surface.SurfaceManager
 import kotlinx.coroutines.flow.MutableStateFlow
-import org.schabi.newpipe.extractor.stream.AudioStream
-import org.schabi.newpipe.extractor.stream.VideoStream
 import java.io.File
 import java.util.Locale
 
@@ -95,8 +96,8 @@ class MediaLoader(
         private set
     var onSabrFallbackNeeded: (() -> Unit)? = null
 
-    /** Invoked with a subtitle track's index and display label once its fetch has finally given up. */
-    var onSubtitleLoadFailed: ((Int, String) -> Unit)? = null
+    /** Invoked with a subtitle track's index, display label and last HTTP status once its fetch has finally given up. */
+    var onSubtitleLoadFailed: ((Int, String, Int?) -> Unit)? = null
 
     /**
      * Load media with video and audio streams.
@@ -205,6 +206,7 @@ class MediaLoader(
                 if (mediaSource != null) {
                     exoPlayer.setMediaSource(mediaSource)
                     exoPlayer.prepare()
+                    VideoStartupTrace.onPrepared(mediaId.ifBlank { null })
                     stateFlow.value = stateFlow.value.copy(isPrepared = true)
 
                     // SABR sessions already start fetching at the position; seeking the
@@ -373,6 +375,7 @@ class MediaLoader(
                         cacheManager?.getLiveHlsDataSourceFactory()
                             ?: cacheManager?.getHlsDataSourceFactory()
                             ?: dataSourceFactory,
+                        liveSegmentDataSourceFactory = cacheManager?.getLiveSegmentDataSourceFactory(),
                         mediaId = mediaId,
                         mediaMetadata = mediaMetadata,
                     )
@@ -511,8 +514,9 @@ class MediaLoader(
                         captionTransport != null && captionTransport.handles(uri) -> captionTransport
                         else -> dataSourceFactory
                     }
+                val otherTransport = dataSourceFactory.takeIf { factory === captionTransport }
                 SingleSampleMediaSource
-                    .Factory(factory)
+                    .Factory(captionDataSourceFactory(caption, factory, otherTransport, label))
                     .setLoadErrorHandlingPolicy(SubtitleLoadErrorHandlingPolicy(caption.isTranslated))
                     // Stays true: a propagated subtitle error would surface as a fatal
                     // ExoPlaybackException and stop the video over a failed sidecar text track.
@@ -521,8 +525,8 @@ class MediaLoader(
                     .also { source ->
                         source.addEventListener(
                             Handler(Looper.getMainLooper()),
-                            subtitleLoadFailureReporter(index, label, subtitleUrl) { failedIndex, failedLabel ->
-                                onSubtitleLoadFailed?.invoke(failedIndex, failedLabel)
+                            subtitleLoadFailureReporter(index, label, subtitleUrl) { failedIndex, failedLabel, status ->
+                                onSubtitleLoadFailed?.invoke(failedIndex, failedLabel, status)
                             },
                         )
                     }

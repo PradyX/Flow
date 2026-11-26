@@ -70,6 +70,7 @@ internal fun SettingsListScope.playbackSections(
         switch(PlaybackIndex.loopAll, viewModel.loopAll, viewModel::setLoopAll)
         switch(PlaybackIndex.skipSilence, viewModel.skipSilence, viewModel::setSkipSilence)
         switch(PlaybackIndex.playDuringCalls, viewModel.playDuringCalls, viewModel::setPlayDuringCalls)
+        switch(PlaybackIndex.pauseVideoWhenMuted, viewModel.pauseVideoWhenMuted, viewModel::setPauseVideoWhenMuted)
     }
     group(key = "playback.sound", header = R.string.eq_settings_section) {
         nav(
@@ -227,6 +228,7 @@ private fun SettingsListScope.watchPageSection(
     state: PlaybackStructure,
 ) = group(key = "playback.watch_page", header = R.string.settings_section_watch_page) {
     switch(PlaybackIndex.relatedVideos, viewModel.relatedVideos, viewModel::setRelatedVideos)
+    switch(PlaybackIndex.relatedCollections, viewModel.relatedCollections, viewModel::setRelatedCollections)
     row(PlaybackIndex.relatedCardStyle.key) { shape ->
         val selected by viewModel.relatedCardStyle.collectAsStateWithLifecycle()
         SettingsToggleGroupRow(

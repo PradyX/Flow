@@ -23,8 +23,11 @@ import io.github.aedev.flow.sync2.engine.Session
 import io.github.aedev.flow.sync2.live.LiveChannel
 import io.github.aedev.flow.sync2.live.LiveDevices
 import io.github.aedev.flow.sync2.live.LiveTransport
+import io.github.aedev.flow.sync2.live.startSessionLive
 import io.github.aedev.flow.sync2.roster.replayRoster
+import io.github.aedev.flow.sync2.service.AutoSync
 import io.github.aedev.flow.sync2.service.LinkedSync
+import io.github.aedev.flow.sync2.service.SyncTrigger
 import io.github.aedev.flow.sync2.service.linkedError
 import io.github.aedev.flow.sync2.store.GroupStore
 import io.github.aedev.flow.sync2.store.LocalStore
@@ -33,6 +36,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -85,11 +89,16 @@ class LanSync
         private val sync: LinkedSync,
         private val live: LiveChannel,
         private val devices: LiveDevices,
+        private val autoSync: AutoSync,
+        private val met: LanMet,
         @ApplicationScope private val scope: CoroutineScope,
     ) {
         private val open = ConcurrentHashMap.newKeySet<String>()
         private val seen = MutableStateFlow<Map<String, Long>>(emptyMap())
         private val dialed = ConcurrentHashMap<String, Long>()
+
+        /** Asks the running session to dial every remembered member now, past the once-a-minute limit. */
+        private val reachNow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
         /** The mDNS names this device advertised, which it never dials. */
         private val names = ConcurrentHashMap.newKeySet<String>()
@@ -160,7 +169,7 @@ class LanSync
                         launch {
                             val connection = connect(row.address) ?: return@launch
                             try {
-                                converse(connectLink(connection, session), session, leaving = true)
+                                converse(connectLink(connection, session), session, serveOnly = true)
                                 Log.i(TAG, "LAN farewell delivered")
                             } catch (e: CancellationException) {
                                 throw e
@@ -172,6 +181,45 @@ class LanSync
                         }
                     }
                 }
+            }
+        }
+
+        /** Where the [removed] devices last listened. Read before the removal, which makes this device forget them. */
+        suspend fun addressesOf(removed: Collection<String>): List<LanAddressRow> = removalTargets(db.lan().addresses(), removed)
+
+        /**
+         * Brings the devices just removed, at [rows], the roster that removes them, for up to 10 seconds, so they
+         * stop at once instead of on their next dial; the members left are dialed now (spec/live.md, LAN groups).
+         * The removed devices lack the new epoch's key, and [dialLink] steps back to the one they still hold.
+         */
+        fun noticeRemoval(rows: List<LanAddressRow>) {
+            reachNow.tryEmit(Unit)
+            if (rows.isEmpty()) return
+            scope.launch {
+                val session = session() ?: return@launch
+                withTimeoutOrNull(FAREWELL_MS) {
+                    coroutineScope {
+                        for (row in rows) launch { deliverRemoval(row, session) }
+                    }
+                }
+            }
+        }
+
+        private suspend fun deliverRemoval(
+            row: LanAddressRow,
+            session: Session,
+        ) {
+            var link: LanLink? = null
+            try {
+                link = dialLink(session, null, removed = true) { connect(row.address) } ?: return
+                converse(link, session, serveOnly = true)
+                Log.i(TAG, "LAN removal delivered")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "LAN removal not delivered: ${e.linkedError()}")
+            } finally {
+                link?.close()
             }
         }
 
@@ -234,6 +282,7 @@ class LanSync
                     launch { reach(port) }
                     // Something to send: a live message, or objects this device wrote.
                     launch { live.envelopes.collect { reach(port, it) } }
+                    launch { reachNow.collect { reach(port, now = true) } }
                     launch {
                         db
                             .groups()
@@ -265,11 +314,12 @@ class LanSync
         private suspend fun CoroutineScope.reach(
             port: Int,
             envelope: ByteArray? = null,
+            now: Boolean = false,
         ) {
             val reachable = devices.online.value
             for (row in db.lan().addresses()) {
                 val address = row.address
-                if (address !in open && (due(address) || (envelope != null && row.did in reachable))) {
+                if (address !in open && (now || due(address) || (envelope != null && row.did in reachable))) {
                     launch { dial(row.host, row.port, port, envelope) }
                 }
             }
@@ -324,13 +374,24 @@ class LanSync
             devices.lanPeers { it + did }
         }
 
-        /** One session with the member that dialed this device over [connection]. Returns the closed link when it got that far. */
+        /**
+         * One session with the member that dialed this device over [connection]. Returns the closed link when it got that
+         * far, or null for a device this one removed: it is only served the roster, and its address isn't kept.
+         */
         private suspend fun meet(
             connection: SyncConnection,
             greeter: LanGreeter,
         ): LanLink? =
             try {
-                greeter.greet(connection)?.let { (link, session) -> talk(link, session, "LAN session accepted") }
+                greeter.greet(connection)?.let { (link, session) ->
+                    if (link.peerRemoved) {
+                        converse(link, session, serveOnly = true)
+                        Log.i(TAG, "LAN session served the roster to a removed device")
+                        null
+                    } else {
+                        talk(link, session, "LAN session accepted")
+                    }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -369,37 +430,38 @@ class LanSync
             envelope: ByteArray? = null,
         ): LanLink {
             converse(link, session, envelope = envelope)
-            seen.update { it + (link.peer to System.currentTimeMillis()) }
+            val at = System.currentTimeMillis()
+            seen.update { it + (link.peer to at) }
             Log.i(TAG, said)
-            sync.syncNow()
+            if (autoSync.allows(SyncTrigger.LAN_MEETING)) {
+                sync.syncNow()
+                group?.let { met.met(it, link.peer, at) }
+            }
             return link
         }
 
         /**
          * Answers the other member's requests until its pull is over. This device pulls too and sends
-         * live messages on the session, unless it is [leaving].
+         * live messages on the session, unless it [serveOnly]: when it is leaving, or the other was removed.
          */
         private suspend fun converse(
             link: LanLink,
             session: Session,
-            leaving: Boolean = false,
+            serveOnly: Boolean = false,
             envelope: ByteArray? = null,
         ) = coroutineScope {
             val peer = LanPeer(link, session, local) { live.receive(it) }
             val reader = peer.start(this)
             val detach =
-                if (leaving) {
-                    null
-                } else {
-                    live.attach(
-                        object : LiveTransport {
-                            override suspend fun send(envelope: ByteArray) = peer.sendLive(envelope)
-                        },
-                    )
-                }
+                startSessionLive(
+                    object : LiveTransport {
+                        override suspend fun send(envelope: ByteArray) = peer.sendLive(envelope)
+                    },
+                    waiting = envelope,
+                    attach = if (serveOnly) null else live::attach,
+                )
             try {
-                envelope?.let { peer.sendLive(it) }
-                if (!leaving) peer.pull()
+                if (!serveOnly) peer.pull()
                 peer.awaitQuiet(QUIET_MS)
             } finally {
                 detach?.invoke()
@@ -414,3 +476,9 @@ class LanSync
     }
 
 private val LanAddressRow.address: String get() = "$host:$port"
+
+/** The remembered addresses of the [removed] devices, each once. */
+internal fun removalTargets(
+    rows: List<LanAddressRow>,
+    removed: Collection<String>,
+): List<LanAddressRow> = rows.filter { it.did in removed }.distinctBy { it.address }

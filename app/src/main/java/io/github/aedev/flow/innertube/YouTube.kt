@@ -1,7 +1,9 @@
 package io.github.aedev.flow.innertube
 
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import io.github.aedev.flow.data.model.Comment
+import io.github.aedev.flow.data.model.Video
 import io.github.aedev.flow.data.model.VideoCollaborator
 import io.github.aedev.flow.innertube.models.AccountInfo
 import io.github.aedev.flow.innertube.models.AlbumItem
@@ -57,6 +59,7 @@ import io.github.aedev.flow.innertube.pages.HistoryPage
 import io.github.aedev.flow.innertube.pages.HomePage
 import io.github.aedev.flow.innertube.pages.LibraryContinuationPage
 import io.github.aedev.flow.innertube.pages.LibraryPage
+import io.github.aedev.flow.innertube.pages.LiveMetadataUpdate
 import io.github.aedev.flow.innertube.pages.MoodAndGenres
 import io.github.aedev.flow.innertube.pages.NewReleaseAlbumPage
 import io.github.aedev.flow.innertube.pages.NextPage
@@ -99,18 +102,20 @@ import io.github.aedev.flow.innertube.pages.explore.ranked
 import io.github.aedev.flow.innertube.pages.explore.toExploreDestinationShell
 import io.github.aedev.flow.innertube.pages.explore.trendingVideoChart
 import io.github.aedev.flow.innertube.pages.mixSeedVideoId
+import io.github.aedev.flow.innertube.pages.objectOrNull
 import io.github.aedev.flow.innertube.pages.parseYouTubeViewCount
+import io.github.aedev.flow.innertube.pages.reel.ReelItem
 import io.github.aedev.flow.innertube.pages.reel.ReelLockup
-import io.github.aedev.flow.innertube.pages.reel.ReelOverlay
 import io.github.aedev.flow.innertube.pages.reel.ReelParams
 import io.github.aedev.flow.innertube.pages.reel.ReelSequencePage
+import io.github.aedev.flow.innertube.pages.reel.toReelItem
 import io.github.aedev.flow.innertube.pages.reel.toReelLockups
-import io.github.aedev.flow.innertube.pages.reel.toReelOverlay
 import io.github.aedev.flow.innertube.pages.reel.toReelSequencePage
 import io.github.aedev.flow.innertube.pages.renderer.CommunityCommentsPage
 import io.github.aedev.flow.innertube.pages.renderer.CommunityPostsPage
 import io.github.aedev.flow.innertube.pages.renderer.FeedItemOwner
 import io.github.aedev.flow.innertube.pages.renderer.FeedShelf
+import io.github.aedev.flow.innertube.pages.renderer.SinglePostPage
 import io.github.aedev.flow.innertube.pages.renderer.collaboratorDialog
 import io.github.aedev.flow.innertube.pages.renderer.lockupDateAndViews
 import io.github.aedev.flow.innertube.pages.renderer.toCommunityCommentsPage
@@ -119,13 +124,17 @@ import io.github.aedev.flow.innertube.pages.search.SearchResultsPage
 import io.github.aedev.flow.innertube.pages.search.SearchSuggestion
 import io.github.aedev.flow.innertube.pages.search.parseSearchSuggestions
 import io.github.aedev.flow.innertube.pages.search.toSearchResultsPage
+import io.github.aedev.flow.innertube.pages.stringOrNull
+import io.github.aedev.flow.innertube.pages.throwIfRefused
 import io.github.aedev.flow.innertube.pages.timedLyricLines
 import io.github.aedev.flow.innertube.pages.toCommentRepliesPage
+import io.github.aedev.flow.innertube.pages.toLiveMetadataUpdate
 import io.github.aedev.flow.innertube.pages.toMixPlaylistPage
 import io.github.aedev.flow.innertube.pages.toTimedComments
 import io.github.aedev.flow.innertube.pages.toVideoCommentsPage
 import io.github.aedev.flow.innertube.pages.toVideoDescriptionPage
 import io.github.aedev.flow.innertube.pages.toVideoPlaylistPage
+import io.github.aedev.flow.innertube.pages.toWatchPlaylistContinuation
 import io.github.aedev.flow.innertube.pages.videoCommentsPanelHeader
 import io.github.aedev.flow.innertube.pages.videoCommentsSection
 import io.github.aedev.flow.utils.PerformanceDispatcher
@@ -149,10 +158,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper
 import java.net.Proxy
-import java.time.Instant
-import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 
@@ -165,6 +171,7 @@ object YouTube {
     private const val CHANNEL_VIDEOS_PARAMS = "EgZ2aWRlb3PyBgQKAjoA"
     private const val CHANNEL_LIVE_PARAMS = "EgdzdHJlYW1z8gYECgJ6AA%3D%3D"
     private const val CHANNEL_POSTS_PARAMS = "EgVwb3N0c_IGBAoCSgA="
+    private const val POST_DETAIL_BROWSE_ID = "FEpost_detail"
     private const val CHANNEL_SHORTS_PARAMS = "EgZzaG9ydHPyBgUKA5oBAA=="
 
     /** The playlist header menu's "Show unavailable videos" view, which lists a Shorts grid in full. */
@@ -206,11 +213,6 @@ object YouTube {
         set(value) {
             innerTube.proxyAuth = value
         }
-    var cacheDirectory: java.io.File?
-        get() = innerTube.cacheDirectory
-        set(value) {
-            innerTube.cacheDirectory = value
-        }
     var useLoginForBrowse: Boolean
         get() = innerTube.useLoginForBrowse
         set(value) {
@@ -219,7 +221,7 @@ object YouTube {
 
     suspend fun searchSuggestions(query: String): Result<SearchSuggestions> =
         runCatching {
-            val response = innerTube.getSearchSuggestions(WEB_REMIX, query).body<GetSearchSuggestionsResponse>()
+            val response = innerTube.getSearchSuggestions(currentMusicClient(), query).body<GetSearchSuggestionsResponse>()
             SearchSuggestions(
                 queries =
                     response.contents
@@ -247,7 +249,7 @@ object YouTube {
 
     suspend fun searchSummary(query: String): Result<SearchSummaryPage> =
         runCatching {
-            SearchSummaryPage.fromSearchResponse(innerTube.search(WEB_REMIX, query).body<SearchResponse>())
+            SearchSummaryPage.fromSearchResponse(innerTube.search(currentMusicClient(), query).body<SearchResponse>())
         }
 
     suspend fun search(
@@ -255,7 +257,7 @@ object YouTube {
         filter: SearchFilter,
     ): Result<SearchResult> =
         runCatching {
-            val response = innerTube.search(WEB_REMIX, query, filter.value).body<SearchResponse>()
+            val response = innerTube.search(currentMusicClient(), query, filter.value).body<SearchResponse>()
             // The results shelf is not always the last section: a "did you mean" or message can follow it.
             val shelf =
                 response.contents
@@ -299,6 +301,14 @@ object YouTube {
             parseSearchSuggestions(innerTube.searchSuggestions(query).bodyAsText())
         }
 
+    /**
+     * Opens the suggest host's connection before the first keystroke needs it. The host is not the
+     * one start-up warms, and an empty query costs a few dozen bytes.
+     */
+    suspend fun warmSearchSuggestions() {
+        runCatching { innerTube.searchSuggestions("").bodyAsText() }
+    }
+
     /** One page of video search. Filters and sorting ride in [params]; paging rides in [continuation]. */
     suspend fun videoSearch(
         query: String,
@@ -327,18 +337,26 @@ object YouTube {
             ?.let { visitorData = it }
     }
 
-    private suspend fun currentWebClient(): YouTubeClient =
-        withContext(Dispatchers.IO) {
-            WEB.copy(
-                clientVersion =
-                    runCatching { YoutubeParsingHelper.getClientVersion() }
-                        .getOrDefault(WEB.clientVersion),
-            )
+    @VisibleForTesting
+    internal var webClients: WebClients
+        get() = innerTube.webClients
+        set(value) {
+            innerTube.webClients = value
         }
+
+    private suspend fun currentWebClient(): YouTubeClient = webClients.live(WEB)
+
+    private fun currentMusicClient(): YouTubeClient = webClients.current(WEB_REMIX)
+
+    /** [client] with the version its own site sends today when it is a web client, else unchanged. */
+    suspend fun liveWebClient(client: YouTubeClient): YouTubeClient = webClients.live(client)
+
+    /** The WEB version requests are going out with, for diagnostics; never fetches. */
+    fun webClientVersionInUse(): String = webClients.known(WEB)
 
     suspend fun searchContinuation(continuation: String): Result<SearchResult> =
         runCatching {
-            val response = innerTube.search(WEB_REMIX, continuation = continuation).body<SearchResponse>()
+            val response = innerTube.search(currentMusicClient(), continuation = continuation).body<SearchResponse>()
             SearchResult(
                 items =
                     response.continuationContents
@@ -355,27 +373,19 @@ object YouTube {
             )
         }
 
-    suspend fun videoAvatarStack(videoId: String): Result<List<String>> =
+    /** A collaboration's channels and its avatar stack, read from one watch request. */
+    suspend fun videoOwnerCredits(videoId: String): Result<Pair<List<VideoCollaborator>, List<String>>> =
         runCatching {
-            val rawBody = innerTube.next(WEB, videoId, null, null, null, null, null).bodyAsText()
+            val rawBody = innerTube.watchOwner(videoId).bodyAsText()
             val root =
                 Json {
                     ignoreUnknownKeys = true
                     explicitNulls = false
                 }.parseToJsonElement(rawBody)
-            root.findVideoOwnerAvatarStackUrls()
+            root.findVideoOwnerCollaborators() to root.findVideoOwnerAvatarStackUrls()
         }
 
-    suspend fun videoCollaborators(videoId: String): Result<List<VideoCollaborator>> =
-        runCatching {
-            val rawBody = innerTube.next(WEB, videoId, null, null, null, null, null).bodyAsText()
-            val root =
-                Json {
-                    ignoreUnknownKeys = true
-                    explicitNulls = false
-                }.parseToJsonElement(rawBody)
-            root.findVideoOwnerCollaborators()
-        }
+    suspend fun videoCollaborators(videoId: String): Result<List<VideoCollaborator>> = videoOwnerCredits(videoId).map { it.first }
 
     private fun JsonElement.collectAvatarImageUrls(): List<String> {
         val urls = mutableListOf<String>()
@@ -473,10 +483,11 @@ object YouTube {
     suspend fun channel(idOrHandle: String): Result<ChannelPage> =
         runCatching {
             val response = channelBrowseJson(browseId = idOrHandle)
+            response.throwIfRefused()
             val about =
                 response
                     .channelAboutContinuation()
-                    ?.let { token -> runCatching { channelBrowseJson(continuation = token).toChannelAbout() }.getOrNull() }
+                    ?.let { token -> runCatching { channelBrowseJson(continuation = token, keep = true).toChannelAbout() }.getOrNull() }
             response.toChannelPage(response.toChannelHeader(idOrHandle).mergedWith(about))
         }
 
@@ -491,7 +502,7 @@ object YouTube {
             resolvedChannelIds[url]?.let { return@runCatching it }
             val channelId =
                 innerTube
-                    .resolveUrl(WEB, url)
+                    .resolveUrl(currentWebClient(), url)
                     .body<ResolveUrlResponse>()
                     .endpoint
                     ?.browseEndpoint
@@ -506,6 +517,7 @@ object YouTube {
     suspend fun channelLanding(channelId: String): Result<ChannelPage> =
         runCatching {
             val response = channelBrowseJson(browseId = channelId)
+            response.throwIfRefused()
             response.toChannelPage(response.toChannelHeader(channelId))
         }
 
@@ -545,25 +557,43 @@ object YouTube {
         browseId: String? = null,
         params: String? = null,
         continuation: String? = null,
-    ): JsonElement {
-        // Channel rows carry server-rendered times ("Scheduled for 9/16/26, 6:45 PM"); the WEB
-        // client's zero offset would print them in UTC.
-        val response =
-            innerTube.channelBrowse(
-                client = currentWebClient().copy(utcOffsetMinutes = localUtcOffsetMinutes()),
-                channelId = browseId,
-                params = params,
-                continuation = continuation,
-            )
-        return Json.parseToJsonElement(response.bodyAsText())
-    }
+        keep: Boolean = continuation == null,
+    ): JsonElement =
+        cachedChannelBrowse(
+            client = currentWebClient(),
+            browseId = browseId,
+            params = params,
+            continuation = continuation,
+            keep = keep,
+        )
 
-    private fun localUtcOffsetMinutes(): Int =
-        ZoneId
-            .systemDefault()
-            .rules
-            .getOffset(Instant.now())
-            .totalSeconds / 60
+    private val channelBrowses = ChannelBrowseCache()
+
+    fun trimMemory() = channelBrowses.clear()
+
+    /**
+     * A channel browse through [channelBrowses]. Only a page a channel opens on is kept ([keep]): a paging
+     * continuation is read once and would push the channel's own pages out.
+     */
+    private suspend fun cachedChannelBrowse(
+        client: YouTubeClient,
+        browseId: String?,
+        params: String?,
+        continuation: String?,
+        keep: Boolean = continuation == null,
+    ): JsonElement {
+        val fetch = suspend { innerTube.channelBrowse(client, browseId, params, continuation).bodyAsText() }
+        if (!keep) return Json.parseToJsonElement(fetch())
+        val key =
+            ChannelBrowseCache.Key(
+                browseId = browseId.takeIf { continuation == null },
+                params = params.takeIf { continuation == null },
+                continuation = continuation,
+                locale = locale,
+                visitorData = visitorData,
+            )
+        return channelBrowses.read(key, fetch)
+    }
 
     /**
      * The landing response carries a one-line description and nothing else about the channel; the
@@ -668,17 +698,12 @@ object YouTube {
         continuation: String? = null,
     ): Result<ChannelShortsPage> =
         runCatching {
-            val client = currentWebClient()
-            val response =
-                innerTube.channelBrowse(
-                    client = client,
-                    channelId = channelId,
-                    params = CHANNEL_SHORTS_PARAMS.takeIf { continuation == null },
-                    continuation = continuation,
-                )
-            Json
-                .parseToJsonElement(response.bodyAsText())
-                .jsonObject
+            cachedChannelBrowse(
+                client = currentWebClient(),
+                browseId = channelId,
+                params = CHANNEL_SHORTS_PARAMS.takeIf { continuation == null },
+                continuation = continuation,
+            ).jsonObject
                 .toChannelShortsPage()
         }
 
@@ -721,11 +746,13 @@ object YouTube {
             MusicVideoChart(title = playlist.title, entries = page.videos.ranked())
         }
 
+    /** [params] is the posts tab's own token from the channel's tab list; the usual one stands in without it. */
     suspend fun communityPosts(
         channelId: String,
         channelName: String,
         channelThumbnailUrl: String,
-    ): Result<CommunityPostsPage> = communityPostsPage(channelId, channelName, channelThumbnailUrl)
+        params: String? = null,
+    ): Result<CommunityPostsPage> = communityPostsPage(channelId, channelName, channelThumbnailUrl, params = params)
 
     suspend fun communityPostsContinuation(
         continuation: String,
@@ -742,17 +769,45 @@ object YouTube {
     suspend fun communityPostComments(
         postId: String,
         params: String?,
-    ): Result<CommunityCommentsPage> =
+    ): Result<CommunityCommentsPage> = runCatching { commentsFrom(communityPostCommentsPage(postId = postId, params = params)) }
+
+    /** The comments of a post whose page [detail] is already in hand, as [communityPost] returns it. */
+    suspend fun communityPostComments(detail: CommunityCommentsPage): Result<CommunityCommentsPage> = runCatching { commentsFrom(detail) }
+
+    /** A post's page often holds only the token for its comments; the first page of them is behind it. */
+    private suspend fun commentsFrom(initial: CommunityCommentsPage): CommunityCommentsPage {
+        val continuation = initial.continuation
+        if (initial.comments.isNotEmpty() || continuation == null) return initial
+        val commentsPage = communityPostCommentsPage(continuation = continuation)
+        return commentsPage.copy(
+            commentCountText = commentsPage.commentCountText ?: initial.commentCountText,
+            sortOptions = commentsPage.sortOptions.ifEmpty { initial.sortOptions },
+        )
+    }
+
+    /**
+     * One post from its `/post/` link. Its FEpost_detail page answers only to the params
+     * resolve_url gives the link, and holds the post and the first token of its comments.
+     */
+    suspend fun communityPost(postId: String): Result<SinglePostPage> =
         runCatching {
-            val initial = communityPostCommentsPage(postId = postId, params = params)
-            if (initial.comments.isNotEmpty() || initial.continuation == null) {
-                initial
-            } else {
-                val commentsPage = communityPostCommentsPage(continuation = initial.continuation)
-                commentsPage.copy(
-                    commentCountText = commentsPage.commentCountText ?: initial.commentCountText,
-                )
-            }
+            val params =
+                innerTube
+                    .resolveUrl(WEB, "https://www.youtube.com/post/$postId")
+                    .body<ResolveUrlResponse>()
+                    .endpoint
+                    ?.browseEndpoint
+                    ?.takeIf { it.browseId == POST_DETAIL_BROWSE_ID }
+                    ?.params
+                    ?: error("No post behind $postId")
+            val page = Json.parseToJsonElement(innerTube.postCommentsBrowse(currentWebClient(), params = params).bodyAsText())
+            val post =
+                page.toCommunityPostsPage(fallbackAuthorName = "", fallbackAuthorAvatarUrl = "").posts.firstOrNull()
+                    ?: error("No post in the page of $postId")
+            SinglePostPage(
+                post = post.copy(commentEndpointParams = post.commentEndpointParams ?: params),
+                comments = page.toCommunityCommentsPage(),
+            )
         }
 
     suspend fun communityPostCommentsContinuation(continuation: String): Result<CommunityCommentsPage> =
@@ -772,7 +827,7 @@ object YouTube {
         runCatching {
             val response =
                 innerTube.channelBrowse(
-                    client = WEB,
+                    client = currentWebClient(),
                     channelId = "VL$playlistId".takeIf { continuation == null },
                     params = params.takeIf { continuation == null },
                     continuation = continuation,
@@ -792,17 +847,15 @@ object YouTube {
         channelName: String,
         channelThumbnailUrl: String,
         continuation: String? = null,
+        params: String? = null,
     ): Result<CommunityPostsPage> =
         runCatching {
-            val client = currentWebClient()
-            val response =
-                innerTube.channelBrowse(
-                    client = client,
-                    channelId = channelId.takeIf { continuation == null },
-                    params = CHANNEL_POSTS_PARAMS.takeIf { continuation == null },
-                    continuation = continuation,
-                )
-            Json.parseToJsonElement(response.bodyAsText()).toCommunityPostsPage(
+            cachedChannelBrowse(
+                client = currentWebClient(),
+                browseId = channelId.takeIf { continuation == null },
+                params = (params?.takeIf(String::isNotBlank) ?: CHANNEL_POSTS_PARAMS).takeIf { continuation == null },
+                continuation = continuation,
+            ).toCommunityPostsPage(
                 fallbackAuthorName = channelName,
                 fallbackAuthorAvatarUrl = channelThumbnailUrl,
             )
@@ -1052,7 +1105,7 @@ object YouTube {
         withSongs: Boolean = true,
     ): Result<AlbumPage> =
         runCatching {
-            val response = innerTube.browse(WEB_REMIX, browseId).body<BrowseResponse>()
+            val response = innerTube.browse(currentMusicClient(), browseId).body<BrowseResponse>()
             if (browseId.contains("FEmusic_library_privately_owned_release_detail")) {
                 val playlistId =
                     response.header
@@ -1221,7 +1274,7 @@ object YouTube {
         album: AlbumItem? = null,
     ): Result<List<SongItem>> =
         runCatching {
-            var response = innerTube.browse(WEB_REMIX, "VL$playlistId").body<BrowseResponse>()
+            var response = innerTube.browse(currentMusicClient(), "VL$playlistId").body<BrowseResponse>()
 
             val twoColumnRenderer = response.contents?.twoColumnBrowseResultsRenderer
             val secondaryContents = twoColumnRenderer?.secondaryContents
@@ -1253,7 +1306,7 @@ object YouTube {
                 response =
                     innerTube
                         .browse(
-                            client = WEB_REMIX,
+                            client = currentMusicClient(),
                             continuation = continuation,
                         ).body<BrowseResponse>()
                 songs +=
@@ -1276,12 +1329,12 @@ object YouTube {
 
     suspend fun artist(browseId: String): Result<ArtistPage> =
         runCatching {
-            ArtistPage.fromBrowseResponse(browseId, innerTube.browse(WEB_REMIX, browseId).body<BrowseResponse>())
+            ArtistPage.fromBrowseResponse(browseId, innerTube.browse(currentMusicClient(), browseId).body<BrowseResponse>())
         }
 
     suspend fun artistItems(endpoint: BrowseEndpoint): Result<ArtistItemsPage> =
         runCatching {
-            val response = innerTube.browse(WEB_REMIX, endpoint.browseId, endpoint.params).body<BrowseResponse>()
+            val response = innerTube.browse(currentMusicClient(), endpoint.browseId, endpoint.params).body<BrowseResponse>()
             val sectionContent =
                 response.contents
                     ?.singleColumnBrowseResultsRenderer
@@ -1384,7 +1437,7 @@ object YouTube {
 
     suspend fun artistItemsContinuation(continuation: String): Result<ArtistItemsContinuationPage> =
         runCatching {
-            val response = innerTube.browse(WEB_REMIX, continuation = continuation).body<BrowseResponse>()
+            val response = innerTube.browse(currentMusicClient(), continuation = continuation).body<BrowseResponse>()
 
             when {
                 response.continuationContents?.gridContinuation != null -> {
@@ -1443,7 +1496,7 @@ object YouTube {
     private suspend fun podcastHeader(playlistId: String): MusicResponsiveHeaderRenderer? =
         runCatching {
             innerTube
-                .browse(client = WEB_REMIX, browseId = "MPSP$playlistId", setLogin = true)
+                .browse(client = currentMusicClient(), browseId = "MPSP$playlistId", setLogin = true)
                 .body<BrowseResponse>()
                 .contents
                 ?.twoColumnBrowseResultsRenderer
@@ -1462,7 +1515,7 @@ object YouTube {
             val response =
                 innerTube
                     .browse(
-                        client = WEB_REMIX,
+                        client = currentMusicClient(),
                         browseId = "VL$playlistId",
                         setLogin = true,
                     ).body<BrowseResponse>()
@@ -1573,7 +1626,7 @@ object YouTube {
             val response =
                 innerTube
                     .browse(
-                        client = WEB_REMIX,
+                        client = currentMusicClient(),
                         continuation = continuation,
                         browseId = "",
                         setLogin = true,
@@ -1635,7 +1688,7 @@ object YouTube {
                 return@runCatching homeContinuation(continuation).getOrThrow()
             }
 
-            val response = innerTube.browse(WEB_REMIX, browseId = browseId, params = params).body<BrowseResponse>()
+            val response = innerTube.browse(currentMusicClient(), browseId = browseId, params = params).body<BrowseResponse>()
             val continuation =
                 response.contents
                     ?.singleColumnBrowseResultsRenderer
@@ -1672,7 +1725,7 @@ object YouTube {
     private suspend fun homeContinuation(continuation: String): Result<HomePage> =
         runCatching {
             val response =
-                innerTube.browse(WEB_REMIX, continuation = continuation).body<BrowseResponse>()
+                innerTube.browse(currentMusicClient(), continuation = continuation).body<BrowseResponse>()
             val continuation =
                 response.continuationContents
                     ?.sectionListContinuation
@@ -1693,7 +1746,7 @@ object YouTube {
 
     suspend fun explore(): Result<ExplorePage> =
         runCatching {
-            val response = innerTube.browse(WEB_REMIX, browseId = "FEmusic_explore").body<BrowseResponse>()
+            val response = innerTube.browse(currentMusicClient(), browseId = "FEmusic_explore").body<BrowseResponse>()
             ExplorePage(
                 newReleaseAlbums =
                     response.contents
@@ -1746,7 +1799,7 @@ object YouTube {
 
     suspend fun newReleaseAlbums(): Result<List<AlbumItem>> =
         runCatching {
-            val response = innerTube.browse(WEB_REMIX, browseId = "FEmusic_new_releases_albums").body<BrowseResponse>()
+            val response = innerTube.browse(currentMusicClient(), browseId = "FEmusic_new_releases_albums").body<BrowseResponse>()
             response.contents
                 ?.singleColumnBrowseResultsRenderer
                 ?.tabs
@@ -1765,7 +1818,7 @@ object YouTube {
 
     suspend fun moodAndGenres(): Result<List<MoodAndGenres>> =
         runCatching {
-            val response = innerTube.browse(WEB_REMIX, browseId = "FEmusic_moods_and_genres").body<BrowseResponse>()
+            val response = innerTube.browse(currentMusicClient(), browseId = "FEmusic_moods_and_genres").body<BrowseResponse>()
             response.contents
                 ?.singleColumnBrowseResultsRenderer
                 ?.tabs
@@ -1782,7 +1835,7 @@ object YouTube {
         params: String?,
     ): Result<BrowseResult> =
         runCatching {
-            val response = innerTube.browse(WEB_REMIX, browseId = browseId, params = params).body<BrowseResponse>()
+            val response = innerTube.browse(currentMusicClient(), browseId = browseId, params = params).body<BrowseResponse>()
             BrowseResult(
                 title =
                     response.header
@@ -1849,7 +1902,7 @@ object YouTube {
         val response =
             innerTube
                 .browse(
-                    client = WEB_REMIX,
+                    client = currentMusicClient(),
                     browseId = browseId,
                     setLogin = true,
                 ).body<BrowseResponse>()
@@ -1897,7 +1950,7 @@ object YouTube {
             val response =
                 innerTube
                     .browse(
-                        client = WEB_REMIX,
+                        client = currentMusicClient(),
                         continuation = continuation,
                         setLogin = true,
                     ).body<BrowseResponse>()
@@ -1936,7 +1989,7 @@ object YouTube {
             val response =
                 innerTube
                     .browse(
-                        client = WEB_REMIX,
+                        client = currentMusicClient(),
                         continuation = continuation,
                         setLogin = true,
                     ).body<BrowseResponse>()
@@ -1974,7 +2027,7 @@ object YouTube {
             val response =
                 innerTube
                     .browse(
-                        client = WEB_REMIX,
+                        client = currentMusicClient(),
                         browseId = "FEmusic_charts",
                         params = "ggMGCgQIgAQ%3D",
                         continuation = continuation,
@@ -1988,7 +2041,7 @@ object YouTube {
             val response =
                 innerTube
                     .browse(
-                        client = WEB_REMIX,
+                        client = currentMusicClient(),
                         browseId = "FEmusic_history",
                         setLogin = true,
                     ).body<BrowseResponse>()
@@ -2016,9 +2069,9 @@ object YouTube {
         like: Boolean,
     ) = runCatching {
         if (like) {
-            innerTube.likeVideo(WEB_REMIX, videoId)
+            innerTube.likeVideo(currentMusicClient(), videoId)
         } else {
-            innerTube.unlikeVideo(WEB_REMIX, videoId)
+            innerTube.unlikeVideo(currentMusicClient(), videoId)
         }
     }
 
@@ -2027,9 +2080,9 @@ object YouTube {
         like: Boolean,
     ) = runCatching {
         if (like) {
-            innerTube.likePlaylist(WEB_REMIX, playlistId)
+            innerTube.likePlaylist(currentMusicClient(), playlistId)
         } else {
-            innerTube.unlikePlaylist(WEB_REMIX, playlistId)
+            innerTube.unlikePlaylist(currentMusicClient(), playlistId)
         }
     }
 
@@ -2038,9 +2091,9 @@ object YouTube {
         subscribe: Boolean,
     ) = runCatching {
         if (subscribe) {
-            innerTube.subscribeChannel(WEB_REMIX, channelId)
+            innerTube.subscribeChannel(currentMusicClient(), channelId)
         } else {
-            innerTube.unsubscribeChannel(WEB_REMIX, channelId)
+            innerTube.unsubscribeChannel(currentMusicClient(), channelId)
         }
     }
 
@@ -2055,14 +2108,14 @@ object YouTube {
         playlistId: String,
         videoId: String,
     ) = runCatching {
-        innerTube.addToPlaylist(WEB_REMIX, playlistId, videoId)
+        innerTube.addToPlaylist(currentMusicClient(), playlistId, videoId)
     }
 
     suspend fun addPlaylistToPlaylist(
         playlistId: String,
         addPlaylistId: String,
     ) = runCatching {
-        innerTube.addPlaylistToPlaylist(WEB_REMIX, playlistId, addPlaylistId)
+        innerTube.addPlaylistToPlaylist(currentMusicClient(), playlistId, addPlaylistId)
     }
 
     suspend fun removeFromPlaylist(
@@ -2070,7 +2123,7 @@ object YouTube {
         videoId: String,
         setVideoId: String,
     ) = runCatching {
-        innerTube.removeFromPlaylist(WEB_REMIX, playlistId, videoId, setVideoId)
+        innerTube.removeFromPlaylist(currentMusicClient(), playlistId, videoId, setVideoId)
     }
 
     suspend fun moveSongPlaylist(
@@ -2078,35 +2131,35 @@ object YouTube {
         setVideoId: String,
         successorSetVideoId: String?,
     ) = runCatching {
-        innerTube.moveSongPlaylist(WEB_REMIX, playlistId, setVideoId, successorSetVideoId)
+        innerTube.moveSongPlaylist(currentMusicClient(), playlistId, setVideoId, successorSetVideoId)
     }
 
     fun createPlaylist(title: String) =
         runBlocking {
-            innerTube.createPlaylist(WEB_REMIX, title).body<CreatePlaylistResponse>().playlistId
+            innerTube.createPlaylist(currentMusicClient(), title).body<CreatePlaylistResponse>().playlistId
         }
 
     suspend fun renamePlaylist(
         playlistId: String,
         name: String,
     ) = runCatching {
-        innerTube.renamePlaylist(WEB_REMIX, playlistId, name)
+        innerTube.renamePlaylist(currentMusicClient(), playlistId, name)
     }
 
     suspend fun uploadCustomThumbnailLink(
         playlistId: String,
         image: ByteArray,
     ) = runCatching {
-        val uploadUrl = innerTube.getUploadCustomThumbnailLink(WEB_REMIX, image.size).headers["x-guploader-uploadid"]
+        val uploadUrl = innerTube.getUploadCustomThumbnailLink(currentMusicClient(), image.size).headers["x-guploader-uploadid"]
         val blobReq =
             innerTube.uploadCustomThumbnail(
-                WEB_REMIX,
+                currentMusicClient(),
                 uploadUrl!!,
                 image,
             )
         val blobId = Json.decodeFromString<ImageUploadResponse>(blobReq.bodyAsText()).encryptedBlobId
         innerTube
-            .setThumbnailPlaylist(WEB_REMIX, playlistId, blobId)
+            .setThumbnailPlaylist(currentMusicClient(), playlistId, blobId)
             .body<EditPlaylistResponse>()
             .newHeader
             ?.musicEditablePlaylistDetailHeaderRenderer
@@ -2120,7 +2173,7 @@ object YouTube {
     suspend fun removeThumbnailPlaylist(playlistId: String) =
         runCatching {
             innerTube
-                .removeThumbnailPlaylist(WEB_REMIX, playlistId)
+                .removeThumbnailPlaylist(currentMusicClient(), playlistId)
                 .body<EditPlaylistResponse>()
                 .newHeader
                 ?.musicEditablePlaylistDetailHeaderRenderer
@@ -2133,7 +2186,7 @@ object YouTube {
 
     suspend fun deletePlaylist(playlistId: String) =
         runCatching {
-            innerTube.deletePlaylist(WEB_REMIX, playlistId)
+            innerTube.deletePlaylist(currentMusicClient(), playlistId)
         }
 
     suspend fun player(
@@ -2161,7 +2214,7 @@ object YouTube {
     ): Result<PlayerResponse> =
         runCatching {
             innerTube
-                .playerWeb(videoId, signatureTimestamp, poToken, visitorData, locale, cpn, reloadToken, client)
+                .playerWeb(videoId, signatureTimestamp, poToken, visitorData, locale, cpn, reloadToken, webClients.live(client))
                 .body<PlayerResponse>()
         }
 
@@ -2169,24 +2222,35 @@ object YouTube {
      * The creator-declared category for [videoId].
      *
      * MWEB carries a `microformat` where the direct-URL clients the player path uses do not, and it
-     * fills it without a `signatureTimestamp` — the response is UNPLAYABLE and carries no streams,
-     * which is the point: it costs ~8 KB and no base.js fetch, against ~215 KB for WEB.
+     * fills it without a `signatureTimestamp`, so there is no base.js fetch. The field mask trims the
+     * answer to the category alone, so it is read as JSON rather than as a [PlayerResponse].
      */
     suspend fun videoCategory(videoId: String): Result<String?> =
         runCatching {
             innerTube
                 .player(
-                    YouTubeClient.MWEB,
+                    webClients.current(YouTubeClient.MWEB),
                     videoId,
                     playlistId = null,
                     signatureTimestamp = null,
                     localeOverride = YouTubeLocale.EXTRACTION,
                     apiUrl = YouTubeClient.API_URL_YOUTUBE,
+                    fieldMask = VIDEO_CATEGORY_FIELDS,
+                ).body<JsonObject>()
+                .toVideoCategory()
+        }
+
+    /** [videoId]'s details and microformat, in the app's content language; no streams are needed from it. */
+    suspend fun videoSummary(videoId: String): Result<PlayerResponse> =
+        runCatching {
+            innerTube
+                .player(
+                    webClients.current(YouTubeClient.MWEB),
+                    videoId,
+                    playlistId = null,
+                    signatureTimestamp = null,
+                    apiUrl = YouTubeClient.API_URL_YOUTUBE,
                 ).body<PlayerResponse>()
-                .microformat
-                ?.playerMicroformatRenderer
-                ?.category
-                ?.takeIf { it.isNotBlank() }
         }
 
     suspend fun paidPromotion(videoId: String): Result<PaidPromotionLabel?> =
@@ -2198,9 +2262,34 @@ object YouTube {
      * The comment section, the attributed description and the related lane all read this one
      * response, so callers go through the cache that wraps it rather than requesting it each.
      */
-    suspend fun watchNextJson(videoId: String): Result<JsonElement> =
+    suspend fun watchNextJson(
+        videoId: String,
+        playlistId: String? = null,
+    ): Result<JsonElement> =
         runCatching {
-            Json.parseToJsonElement(innerTube.nextWatch(videoId = videoId).bodyAsText())
+            Json.parseToJsonElement(innerTube.nextWatch(videoId = videoId, playlistId = playlistId).bodyAsText())
+        }
+
+    /** The playlist panel's next videos after a [WatchPlaylistWindow], from its continuation [token]. */
+    suspend fun watchPlaylistContinuation(token: String): Result<Pair<List<Video>, String?>?> =
+        runCatching {
+            Json.parseToJsonElement(innerTube.nextWatch(continuation = token).bodyAsText()).toWatchPlaylistContinuation()
+        }
+
+    /** The next page of a watch page's related lane, from the same host and client as the first. */
+    suspend fun relatedContinuationJson(continuation: String): Result<JsonElement> =
+        runCatching {
+            Json.parseToJsonElement(innerTube.nextWatch(continuation = continuation).bodyAsText())
+        }
+
+    /** The live counts [videoId]'s watch page asks for, or the next round of them through [continuation]. */
+    suspend fun updatedMetadata(
+        videoId: String,
+        continuation: String?,
+    ): Result<LiveMetadataUpdate> =
+        runCatching {
+            val response = innerTube.updatedMetadata(videoId = videoId.takeIf { continuation == null }, continuation = continuation)
+            Json.parseToJsonElement(response.bodyAsText()).toLiveMetadataUpdate(locale.hl)
         }
 
     /** The description, its typed spans and the figures beside it, from an already-fetched watch response. */
@@ -2246,52 +2335,15 @@ object YouTube {
                 .toCommentRepliesPage(ownVideoId)
         }
 
-    suspend fun liveChatContinuation(videoId: String): Result<String?> =
-        runCatching {
-            innerTube
-                .nextForLiveChat(videoId)
-                .body<io.github.aedev.flow.innertube.models.response.LiveChatSeedResponse>()
-                .seedContinuation()
-        }
-
     suspend fun liveChat(
         continuation: String,
         offsetMs: Long? = null,
+        replay: Boolean = false,
     ): Result<io.github.aedev.flow.innertube.models.response.GetLiveChatResponse> =
         runCatching {
             innerTube
-                .getLiveChat(continuation, offsetMs)
+                .getLiveChat(continuation, offsetMs, replay)
                 .body<io.github.aedev.flow.innertube.models.response.GetLiveChatResponse>()
-        }
-
-    suspend fun watchMetadata(videoId: String): Result<io.github.aedev.flow.innertube.models.response.WatchMetadataResponse> =
-        runCatching {
-            val primary =
-                innerTube
-                    .next(WEB, videoId, null, null, null, null, null)
-                    .body<io.github.aedev.flow.innertube.models.response.WatchMetadataResponse>()
-            if (primary.relatedVideos().isNotEmpty()) {
-                primary
-            } else {
-                val webWatch =
-                    runCatching {
-                        innerTube
-                            .nextForLiveChat(videoId)
-                            .body<io.github.aedev.flow.innertube.models.response.WatchMetadataResponse>()
-                    }.getOrNull()
-                if (webWatch != null && webWatch.relatedVideos().size > primary.relatedVideos().size) {
-                    webWatch
-                } else {
-                    primary
-                }
-            }
-        }
-
-    suspend fun watchMetadataLite(videoId: String): Result<io.github.aedev.flow.innertube.models.response.WatchMetadataResponse> =
-        runCatching {
-            innerTube
-                .next(WEB, videoId, null, null, null, null, null)
-                .body<io.github.aedev.flow.innertube.models.response.WatchMetadataResponse>()
         }
 
     suspend fun registerPlayback(
@@ -2319,6 +2371,7 @@ object YouTube {
             url = playbackUrl,
             playlistId = playlistId,
             cpn = cpn,
+            client = currentMusicClient(),
         )
     }
 
@@ -2330,7 +2383,7 @@ object YouTube {
             val response =
                 innerTube
                     .next(
-                        WEB_REMIX,
+                        currentMusicClient(),
                         endpoint.videoId,
                         endpoint.playlistId,
                         endpoint.playlistSetVideoId,
@@ -2435,7 +2488,7 @@ object YouTube {
     suspend fun lyricsEndpoint(videoId: String): Result<BrowseEndpoint?> =
         runCatching {
             innerTube
-                .next(WEB_REMIX, videoId, null, null, null, null)
+                .next(currentMusicClient(), videoId, null, null, null, null)
                 .body<NextResponse>()
                 .lyricsBrowseEndpoint()
         }
@@ -2447,7 +2500,7 @@ object YouTube {
 
     suspend fun lyrics(endpoint: BrowseEndpoint): Result<String?> =
         runCatching {
-            val response = innerTube.browse(WEB_REMIX, endpoint.browseId, endpoint.params).body<BrowseResponse>()
+            val response = innerTube.browse(currentMusicClient(), endpoint.browseId, endpoint.params).body<BrowseResponse>()
             response.contents
                 ?.sectionListRenderer
                 ?.contents
@@ -2461,7 +2514,7 @@ object YouTube {
 
     suspend fun related(endpoint: BrowseEndpoint): Result<RelatedPage> =
         runCatching {
-            RelatedPage.fromBrowseResponse(innerTube.browse(WEB_REMIX, endpoint.browseId).body<BrowseResponse>())
+            RelatedPage.fromBrowseResponse(innerTube.browse(currentMusicClient(), endpoint.browseId).body<BrowseResponse>())
         }
 
     suspend fun queue(
@@ -2473,7 +2526,7 @@ object YouTube {
                 assert(videoIds.size <= MAX_GET_QUEUE_SIZE) // Max video limit
             }
             innerTube
-                .getQueue(WEB_REMIX, videoIds, playlistId)
+                .getQueue(currentMusicClient(), videoIds, playlistId)
                 .body<GetQueueResponse>()
                 .queueDatas
                 .mapNotNull {
@@ -2485,7 +2538,7 @@ object YouTube {
 
     suspend fun transcript(videoId: String): Result<String> =
         runCatching {
-            val response = innerTube.getTranscript(WEB_REMIX, videoId).body<GetTranscriptResponse>()
+            val response = innerTube.getTranscript(currentMusicClient(), videoId).body<GetTranscriptResponse>()
             response.actions
                 ?.firstOrNull()
                 ?.updateEngagementPanelAction
@@ -2507,24 +2560,38 @@ object YouTube {
                 }!!
         }
 
-    suspend fun visitorData(): Result<String> =
-        runCatching {
-            Json
-                .parseToJsonElement(innerTube.getSwJsData().bodyAsText().substring(5))
-                .jsonArray[0]
-                .jsonArray[2]
-                .jsonArray
-                .first {
-                    (it as? JsonPrimitive)?.contentOrNull?.let { candidate ->
-                        VISITOR_DATA_REGEX.containsMatchIn(candidate)
-                    } ?: false
-                }.jsonPrimitive.content
-        }
+    private val visitorDataMint =
+        VisitorDataMint(
+            visitorId = {
+                innerTube
+                    .visitorId(currentWebClient())
+                    .body<JsonObject>()["responseContext"]
+                    ?.jsonObject
+                    ?.get("visitorData")
+                    ?.jsonPrimitive
+                    ?.contentOrNull
+            },
+            swJsData = {
+                Json
+                    .parseToJsonElement(innerTube.getSwJsData().bodyAsText().substring(5))
+                    .jsonArray[0]
+                    .jsonArray[2]
+                    .jsonArray
+                    .first {
+                        (it as? JsonPrimitive)?.contentOrNull?.let { candidate ->
+                            VisitorDataMint.VISITOR_DATA.containsMatchIn(candidate)
+                        } ?: false
+                    }.jsonPrimitive.content
+            },
+        )
+
+    /** A fresh visitorData, unrelated to the one in use; see [VisitorDataMint] for where it comes from. */
+    suspend fun visitorData(): Result<String> = runCatching { visitorDataMint.mint() }
 
     suspend fun accountInfo(): Result<AccountInfo> =
         runCatching {
             innerTube
-                .accountMenu(WEB_REMIX)
+                .accountMenu(currentMusicClient())
                 .body<AccountMenuResponse>()
                 .actions[0]
                 .openPopupAction.popup.multiPageMenuRenderer
@@ -2574,9 +2641,11 @@ object YouTube {
 
     const val MAX_GET_QUEUE_SIZE = 1000
 
+    private const val VIDEO_CATEGORY_FIELDS = "microformat.playerMicroformatRenderer.category"
+
     /**
      * One page of the reel feed: the seedless first page for a null token, else the page a
-     * previous response's continuation names. Entries carry ids and tokens only; see [reelOverlay].
+     * previous response's continuation names. Entries carry ids and tokens only; see [reelItem].
      *
      * IOS first because its page is a few kilobytes per entry; ANDROID's carries a serialized
      * prefetch of every reel's player response and runs to several megabytes for the same ids.
@@ -2599,11 +2668,40 @@ object YouTube {
     /** The reels that follow [videoId]. The response never contains the seed itself. */
     suspend fun shortsFromVideo(videoId: String): Result<ReelSequencePage> = shorts(ReelParams.seedSequenceParams(videoId))
 
-    /** Title, channel, counts and sound for one reel — everything the sequence leaves out. */
-    suspend fun reelOverlay(videoId: String): Result<ReelOverlay?> =
+    /** Title, channel, counts, sound, comment panel and description for one reel: everything the sequence leaves out. */
+    suspend fun reelItem(videoId: String): Result<ReelItem?> =
         runCatching {
-            innerTube.reelItemWatch(client = WEB, videoId = videoId).body<JsonObject>().toReelOverlay()
+            innerTube.reelItemWatch(client = currentWebClient(), videoId = videoId).body<JsonObject>().toReelItem(videoId)
         }
 
-    private val VISITOR_DATA_REGEX = Regex("^Cg[t|s]")
+    /** A page of a reel's comments: its panel serves them through `/browse`, which `/next` answers with nothing. */
+    suspend fun reelComments(
+        continuation: String,
+        ownVideoId: String?,
+    ): Result<VideoCommentsPage> =
+        runCatching {
+            Json
+                .parseToJsonElement(innerTube.webBrowseContinuation(currentWebClient(), continuation).bodyAsText())
+                .toVideoCommentsPage(ownVideoId)
+        }
+
+    suspend fun reelCommentReplies(
+        continuation: String,
+        ownVideoId: String?,
+    ): Result<VideoCommentsPage> =
+        runCatching {
+            Json
+                .parseToJsonElement(innerTube.webBrowseContinuation(currentWebClient(), continuation).bodyAsText())
+                .toCommentRepliesPage(ownVideoId)
+        }
 }
+
+/** The category out of a player response, whole or masked to [YouTube.videoCategory]'s field. */
+internal fun JsonObject.toVideoCategory(): String? =
+    this["microformat"]
+        .objectOrNull()
+        ?.get("playerMicroformatRenderer")
+        .objectOrNull()
+        ?.get("category")
+        .stringOrNull()
+        ?.takeIf(String::isNotBlank)

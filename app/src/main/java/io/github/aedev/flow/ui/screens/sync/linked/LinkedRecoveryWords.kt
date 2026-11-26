@@ -25,11 +25,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.aedev.flow.R
 import io.github.aedev.flow.ui.components.shared.FlowNavRow
+import io.github.aedev.flow.ui.components.shared.LocalDpadNavigation
+import io.github.aedev.flow.ui.components.shared.dpadReadThrough
 import io.github.aedev.flow.ui.screens.sync.QrCodeImage
 import io.github.aedev.flow.ui.screens.sync.SyncActionRow
 import io.github.aedev.flow.ui.screens.sync.SyncCard
 import io.github.aedev.flow.ui.screens.sync.SyncRowGroup
 import io.github.aedev.flow.ui.screens.sync.SyncStepHeader
+import io.github.aedev.flow.ui.screens.sync.dpadQrPlate
 
 /** How many words the user types back before the key counts as saved (spec/protocol.md, Recovery). */
 private const val CHECKED_WORDS = 2
@@ -49,7 +52,9 @@ internal fun LinkedRecoveryWords(
             title = stringResource(R.string.linked_words_title),
             body = stringResource(R.string.linked_words_body),
         )
-        SyncCard {
+        // On a remote, the words are a focus stop that Down reads through; nothing else in them takes
+        // focus, so without it the remote can't scroll back up to them from the button below.
+        SyncCard(modifier = Modifier.dpadReadThrough()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 list.withIndex().chunked(2).forEach { pair ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -60,10 +65,20 @@ internal fun LinkedRecoveryWords(
                 }
             }
         }
-        SyncCard(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest) {
+        val saved: @Composable () -> Unit = {
+            SyncActionRow(confirmLabel = stringResource(R.string.linked_words_saved), onConfirm = { checking = true })
+        }
+        // A remote's next stop after the button is the section below; with the button above the code,
+        // reaching it scrolls the whole code into view instead of pushing its top under the title.
+        val dpad = LocalDpadNavigation.current
+        if (dpad) saved()
+        SyncCard(
+            modifier = Modifier.dpadQrPlate(),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+        ) {
             QrCodeImage(words, Modifier.fillMaxWidth().aspectRatio(1f).padding(16.dp))
         }
-        SyncActionRow(confirmLabel = stringResource(R.string.linked_words_saved), onConfirm = { checking = true })
+        if (!dpad) saved()
         return
     }
 
@@ -104,35 +119,17 @@ internal fun LinkedRecoveryWords(
     )
 }
 
-/** Swaps in new recovery words after asking, for words that were lost or seen. */
+/** Asks before swapping in new recovery words, for words that were lost or seen. */
 @Composable
-internal fun ReplaceRecoveryWords(
-    busy: Boolean,
+internal fun ReplaceWordsDialog(
+    onDismiss: () -> Unit,
     onReplace: () -> Unit,
 ) {
-    var confirm by rememberSaveable { mutableStateOf(false) }
-    SyncRowGroup(count = 1) { _, shape ->
-        FlowNavRow(
-            title = stringResource(R.string.linked_replace_words),
-            onClick = { confirm = true },
-            supportingText = stringResource(R.string.linked_replace_words_hint),
-            leadingIcon = Icons.Outlined.Key,
-            enabled = !busy,
-            shape = shape,
-        )
-    }
-    if (confirm) {
-        AlertDialog(
-            onDismissRequest = { confirm = false },
-            title = { Text(stringResource(R.string.linked_replace_words_title)) },
-            text = { Text(stringResource(R.string.linked_replace_words_body)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirm = false
-                    onReplace()
-                }) { Text(stringResource(R.string.linked_replace)) }
-            },
-            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(R.string.linked_cancel)) } },
-        )
-    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.linked_replace_words_title)) },
+        text = { Text(stringResource(R.string.linked_replace_words_body)) },
+        confirmButton = { TextButton(onClick = onReplace) { Text(stringResource(R.string.linked_replace)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.linked_cancel)) } },
+    )
 }

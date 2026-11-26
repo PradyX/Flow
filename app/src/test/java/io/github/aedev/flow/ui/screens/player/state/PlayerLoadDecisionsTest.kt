@@ -3,6 +3,7 @@ package io.github.aedev.flow.ui.screens.player.state
 import com.google.common.truth.Truth.assertThat
 import io.github.aedev.flow.data.model.SponsorBlockSegment
 import io.github.aedev.flow.data.model.Video
+import io.github.aedev.flow.innertube.models.response.VideoChapter
 import io.github.aedev.flow.innertube.models.response.VideoHeatmap
 import io.github.aedev.flow.player.state.EnhancedPlayerState
 import io.github.aedev.flow.player.stream.StoryboardLevel
@@ -10,7 +11,6 @@ import io.mockk.mockk
 import io.mockk.unmockkAll
 import org.junit.After
 import org.junit.Test
-import org.schabi.newpipe.extractor.stream.StreamSegment
 
 /**
  * Pins the decisions a load makes before it does anything: whether it runs at all, what the screen
@@ -142,7 +142,7 @@ class PlayerLoadDecisionsTest {
     fun `the next video starts without the chapters, curve or filmstrip of the one before`() {
         val before =
             VideoPlayerUiState(
-                chapters = listOf(StreamSegment("Intro", 0)),
+                chapters = listOf(VideoChapter("Intro", 0)),
                 heatmap = VideoHeatmap(markers = listOf(mockk()), highlights = emptyList()),
                 storyboard = listOf(mockk<StoryboardLevel>()),
             )
@@ -248,8 +248,16 @@ class PlayerLoadDecisionsTest {
         val playing = VideoPlayerUiState(cachedVideo = video("vid_a"))
         val loading = VideoPlayerUiState(cachedVideo = video("vid_a"), isLoading = true)
 
-        assertThat(playing.shouldExpandInsteadOfPlaying("vid_a")).isTrue()
-        assertThat(loading.shouldExpandInsteadOfPlaying("vid_a")).isTrue()
+        assertThat(playing.shouldExpandInsteadOfPlaying("vid_a", playerVideoId = "vid_a")).isTrue()
+        assertThat(loading.shouldExpandInsteadOfPlaying("vid_a", playerVideoId = null)).isTrue()
+    }
+
+    @Test
+    fun `a link to a video the player let go plays it again`() {
+        val handedAway = VideoPlayerUiState(cachedVideo = video("vid_a"))
+
+        assertThat(handedAway.shouldExpandInsteadOfPlaying("vid_a", playerVideoId = null)).isFalse()
+        assertThat(handedAway.shouldExpandInsteadOfPlaying("vid_a", playerVideoId = "vid_b")).isFalse()
     }
 
     @Test
@@ -258,15 +266,17 @@ class PlayerLoadDecisionsTest {
         val restored = VideoPlayerUiState(cachedVideo = video("vid_a"), isRestoredSession = true)
         val upcoming = VideoPlayerUiState(cachedVideo = video("vid_a"), isUpcoming = true)
 
-        assertThat(failed.shouldExpandInsteadOfPlaying("vid_a")).isFalse()
-        assertThat(restored.shouldExpandInsteadOfPlaying("vid_a")).isFalse()
-        assertThat(upcoming.shouldExpandInsteadOfPlaying("vid_a")).isFalse()
+        assertThat(failed.shouldExpandInsteadOfPlaying("vid_a", playerVideoId = "vid_a")).isFalse()
+        assertThat(restored.shouldExpandInsteadOfPlaying("vid_a", playerVideoId = "vid_a")).isFalse()
+        assertThat(upcoming.shouldExpandInsteadOfPlaying("vid_a", playerVideoId = "vid_a")).isFalse()
     }
 
     @Test
     fun `a link to another video or an empty screen plays it`() {
-        assertThat(VideoPlayerUiState(cachedVideo = video("vid_b")).shouldExpandInsteadOfPlaying("vid_a")).isFalse()
-        assertThat(VideoPlayerUiState().shouldExpandInsteadOfPlaying("vid_a")).isFalse()
+        assertThat(
+            VideoPlayerUiState(cachedVideo = video("vid_b")).shouldExpandInsteadOfPlaying("vid_a", playerVideoId = "vid_b"),
+        ).isFalse()
+        assertThat(VideoPlayerUiState().shouldExpandInsteadOfPlaying("vid_a", playerVideoId = null)).isFalse()
     }
 
     @Test

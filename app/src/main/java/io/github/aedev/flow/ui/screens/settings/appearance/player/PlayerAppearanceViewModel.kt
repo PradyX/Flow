@@ -52,6 +52,7 @@ class PlayerAppearanceViewModel
         val musicBackground = preferences.musicPlayerBackgroundStyle.asState(MusicPlayerBackgroundStyle.BLUR_GRADIENT)
         val hideMusicArtwork = preferences.hideMusicPlayerArtwork.asState(false)
         val followLightTheme = preferences.musicPlayerFollowLightTheme.asState(false)
+        val lyricsOnCover = preferences.immersiveLyricsOnCover.asState(false)
         val artworkControlColors = preferences.musicArtworkControlColors.asState(true)
         val animatedArtwork = preferences.animatedArtwork.asState(false)
         val animatedArtworkWifiOnly = preferences.animatedArtworkWifiOnly.asState(true)
@@ -80,6 +81,7 @@ class PlayerAppearanceViewModel
         val immersiveGlow = preferences.videoAmbientImmersiveEnabled.asState(false)
         val immersiveScrollDim = preferences.videoAmbientImmersiveScrollDim.asState(true)
         val glowInBatterySaver = preferences.videoAmbientGlowInBatterySaver.asState(false)
+        val ambientResponsive = preferences.videoAmbientResponsive.asState(false)
         val videoArtworkColors = preferences.videoArtworkColors.asState(true)
         val groupedQualitySelector = preferences.groupedQualitySelectorEnabled.asState(false)
         val paidPromotionLabel = preferences.paidPromotionLabel.asState(false)
@@ -116,6 +118,8 @@ class PlayerAppearanceViewModel
         fun setHideMusicArtwork(value: Boolean) = write { preferences.setHideMusicPlayerArtwork(value) }
 
         fun setFollowLightTheme(value: Boolean) = write { preferences.setMusicPlayerFollowLightTheme(value) }
+
+        fun setLyricsOnCover(value: Boolean) = write { preferences.setImmersiveLyricsOnCover(value) }
 
         fun setArtworkControlColors(value: Boolean) = write { preferences.setMusicArtworkControlColors(value) }
 
@@ -178,6 +182,8 @@ class PlayerAppearanceViewModel
         fun setImmersiveScrollDim(value: Boolean) = write { preferences.setVideoAmbientImmersiveScrollDim(value) }
 
         fun setGlowInBatterySaver(value: Boolean) = write { preferences.setVideoAmbientGlowInBatterySaver(value) }
+
+        fun setAmbientResponsive(value: Boolean) = write { preferences.setVideoAmbientResponsive(value) }
 
         fun setVideoArtworkColors(value: Boolean) = write { preferences.setVideoArtworkColors(value) }
 

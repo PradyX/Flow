@@ -23,6 +23,7 @@ import io.github.aedev.flow.player.SleepTimerManager
 import io.github.aedev.flow.ui.components.shared.CommentSortFilter
 import io.github.aedev.flow.ui.components.shared.FlowAlertDialog
 import io.github.aedev.flow.ui.components.shared.FlowCommentsBottomSheet
+import io.github.aedev.flow.ui.components.shared.oldestCommentsNote
 import io.github.aedev.flow.ui.components.videoplayer.sheet.FlowLiveChatBottomSheet
 import io.github.aedev.flow.ui.screens.player.VideoPlayerViewModel
 import io.github.aedev.flow.ui.screens.player.state.PlayerCommentsUiState
@@ -62,7 +63,7 @@ internal fun PlayerBottomSheetsContainer(
 
     val handleSeek: (Long) -> Unit =
         remember {
-            { positionMs -> EnhancedPlayerManager.getInstance().seekTo(positionMs) }
+            { positionMs -> EnhancedPlayerManager.getInstance().seekTo(positionMs, exact = true) }
         }
 
     LaunchedEffect(Unit) {
@@ -79,6 +80,8 @@ internal fun PlayerBottomSheetsContainer(
             comments = visibleComments,
             isLoading = commentsUiState.isLoading,
             selectedFilter = screenState.commentSortFilter,
+            sortOptions = commentsUiState.sortOptions,
+            sortNote = oldestCommentsNote(screenState.commentSortFilter, commentsUiState.oldestCapped, commentsUiState.comments.size),
             totalText = commentsUiState.totalText,
             artworkUrl = video.thumbnailUrl,
             showTimed = true,
@@ -112,6 +115,7 @@ internal fun PlayerBottomSheetsContainer(
             collapsedHeight = mediaSheetCollapsedHeight,
             onSheetProgressChange = onMediaSheetProgressChange,
             onDismiss = { screenState.closeSheet() },
+            isReplay = !uiState.isLive,
         )
     }
 

@@ -31,15 +31,12 @@ object MusicPlayerUtils {
     // Request deduplication - prevents duplicate fetches for same video
     private val activeRequests = ConcurrentHashMap<String, CompletableDeferred<Result<PlaybackData>>>()
 
-    private data class CachedResult(
-        val result: Result<PlaybackData>,
-        val expiryMs: Long,
-    ) {
-        // A url prefetched before its client was demoted would stall the same way ~30 s in.
-        fun isFromGatedClient(): Boolean = ClientGateTracker.isGated(StreamDenialClassifier.clientOf(result.getOrNull()?.streamUrl))
-    }
+    // A url prefetched before its client was demoted would stall the same way ~30 s in.
+    private fun PlaybackData.isFromGatedClient(): Boolean = ClientGateTracker.isGated(StreamDenialClassifier.clientOf(streamUrl))
 
-    private val resultCache = ConcurrentHashMap<String, CachedResult>()
+    // Bounded so a long session does not keep every song's formats; the next-song warm-up only needs the last few.
+    private val resultCache = ExpiringLruCache<String, PlaybackData>(RESULT_CACHE_ENTRIES)
+    private const val RESULT_CACHE_ENTRIES = 32
     private const val MAX_RESULT_CACHE_TTL_MS = 600_000L // 10 minutes
 
     // Matches the video player's load budget. The ladder can reach TV_TIZEN, whose remote decoder
@@ -87,28 +84,20 @@ object MusicPlayerUtils {
     }
 
     fun cachedLoudnessGainDb(videoId: String): Float? {
-        val data = resultCache[videoId]?.result?.getOrNull() ?: return null
-        return LoudnessGain.gainDb(data.audioConfig, data.format.loudnessDb)
+        val data = resultCache.stored(videoId) ?: return null
+        return LoudnessGain.gainDb(data.audioConfig, data.format.loudnessDb, data.format.trackAbsoluteLoudnessLkfs)
     }
 
     /** The resolved playback of [videoId] while it is still fresh, without waiting on a request. */
-    fun cachedPlayback(videoId: String): PlaybackData? =
-        resultCache[videoId]
-            ?.takeIf { System.currentTimeMillis() < it.expiryMs && !it.isFromGatedClient() }
-            ?.result
-            ?.getOrNull()
+    fun cachedPlayback(videoId: String): PlaybackData? = resultCache.fresh(videoId)?.takeUnless { it.isFromGatedClient() }
 
     suspend fun playerResponseForPlayback(videoId: String): Result<PlaybackData> =
         withContext(Dispatchers.IO) {
-            val cached = resultCache[videoId]
-            if (cached != null) {
-                if (System.currentTimeMillis() < cached.expiryMs && cached.result.isSuccess && !cached.isFromGatedClient()) {
-                    Log.d(TAG, "Returning cached result for $videoId (expires in ${cached.expiryMs - System.currentTimeMillis()}ms)")
-                    return@withContext cached.result
-                } else {
-                    resultCache.remove(videoId)
-                }
+            cachedPlayback(videoId)?.let {
+                Log.d(TAG, "Returning cached result for $videoId")
+                return@withContext Result.success(it)
             }
+            resultCache.remove(videoId)
 
             val existingRequest = activeRequests[videoId]
             if (existingRequest != null && existingRequest.isActive) {
@@ -128,10 +117,9 @@ object MusicPlayerUtils {
                 val result = fetchPlaybackData(videoId)
                 deferred.complete(result)
 
-                if (result.isSuccess) {
-                    val expiresInSec = result.getOrNull()?.streamExpiresInSeconds ?: 300
-                    val ttlMs = minOf(expiresInSec * 1000L - 60_000L, MAX_RESULT_CACHE_TTL_MS).coerceAtLeast(30_000L)
-                    resultCache[videoId] = CachedResult(result, System.currentTimeMillis() + ttlMs)
+                result.getOrNull()?.let { data ->
+                    val ttlMs = minOf(data.streamExpiresInSeconds * 1000L - 60_000L, MAX_RESULT_CACHE_TTL_MS).coerceAtLeast(30_000L)
+                    resultCache.put(videoId, data, ttlMs)
                     Log.d(TAG, "Cached result for $videoId, TTL=${ttlMs / 1000}s")
                 }
 
@@ -153,9 +141,10 @@ object MusicPlayerUtils {
      */
     private fun resolveFailure(videoId: String): IOException {
         val block = InnerTubeVideoStreamExtractor.blockOf(videoId)
+        val refusal = InnerTubeVideoStreamExtractor.refusalOf(videoId)
         return when {
-            InnerTubeVideoStreamExtractor.isGone(videoId) -> VideoUnavailableException(videoId)
-            block != null -> IOException("YouTube refused $videoId to this viewer: $block", PlaybackBlockedException(block))
+            InnerTubeVideoStreamExtractor.isGone(videoId) -> VideoUnavailableException(videoId, refusal)
+            block != null -> IOException("YouTube refused $videoId to this viewer: $block", PlaybackBlockedException(block, refusal))
             else -> IOException("Failed to resolve stream for $videoId after trying all clients")
         }
     }

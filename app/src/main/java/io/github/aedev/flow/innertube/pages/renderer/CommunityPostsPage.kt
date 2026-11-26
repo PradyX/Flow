@@ -1,6 +1,8 @@
 package io.github.aedev.flow.innertube.pages.renderer
 
 import io.github.aedev.flow.data.model.Comment
+import io.github.aedev.flow.data.model.RichText
+import io.github.aedev.flow.innertube.pages.VideoCommentSort
 import io.github.aedev.flow.innertube.pages.accessibilityLabel
 import io.github.aedev.flow.innertube.pages.arrayOrNull
 import io.github.aedev.flow.innertube.pages.bestThumbnailUrl
@@ -10,9 +12,12 @@ import io.github.aedev.flow.innertube.pages.countTextFromAccessibilityLabel
 import io.github.aedev.flow.innertube.pages.findReplyContinuation
 import io.github.aedev.flow.innertube.pages.normalizeImageUrl
 import io.github.aedev.flow.innertube.pages.objectOrNull
+import io.github.aedev.flow.innertube.pages.runsToRichText
 import io.github.aedev.flow.innertube.pages.stringOrNull
 import io.github.aedev.flow.innertube.pages.toLegacyComment
 import io.github.aedev.flow.innertube.pages.toModernComment
+import io.github.aedev.flow.innertube.pages.toRichText
+import io.github.aedev.flow.innertube.pages.toSortOptions
 import io.github.aedev.flow.innertube.pages.youtubeText
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -21,13 +26,23 @@ import kotlinx.serialization.json.JsonObject
 data class CommunityPost(
     val id: String,
     val authorName: String,
+    /** The author's channel, from the post's author endpoint. */
+    val authorChannelId: String? = null,
     val authorAvatarUrl: String,
     val text: String,
+    /** [text] with the links, timestamps, hashtags and mentions the server marked in it. */
+    val richText: RichText? = null,
     val attachment: PostAttachment?,
     val likeCountText: String,
     val commentCountText: String,
     val commentEndpointParams: String?,
     val publishedTimeText: String,
+)
+
+/** A post opened on its own, with the comments page the same response carried. */
+data class SinglePostPage(
+    val post: CommunityPost,
+    val comments: CommunityCommentsPage,
 )
 
 data class CommunityPostsPage(
@@ -39,6 +54,7 @@ data class CommunityCommentsPage(
     val comments: List<Comment>,
     val continuation: String?,
     val commentCountText: String? = null,
+    val sortOptions: List<VideoCommentSort> = emptyList(),
 )
 
 internal fun JsonElement.toCommunityPostsPage(
@@ -47,7 +63,6 @@ internal fun JsonElement.toCommunityPostsPage(
     owner: FeedItemOwner = FeedItemOwner(name = fallbackAuthorName, avatarUrl = fallbackAuthorAvatarUrl),
 ): CommunityPostsPage {
     val posts = mutableListOf<CommunityPost>()
-    var continuation: String? = null
 
     fun collect(element: JsonElement?) {
         when (element) {
@@ -71,13 +86,6 @@ internal fun JsonElement.toCommunityPostsPage(
                         ?.let(posts::add)
                     return
                 }
-
-                if (continuation == null) {
-                    continuation =
-                        element["continuationItemRenderer"]
-                            .objectOrNull()
-                            ?.continuationToken()
-                }
                 element.values.forEach(::collect)
             }
 
@@ -90,9 +98,26 @@ internal fun JsonElement.toCommunityPostsPage(
     collect(this)
     return CommunityPostsPage(
         posts = posts.distinctBy(CommunityPost::id),
-        continuation = continuation,
+        continuation = postListContinuation(),
     )
 }
+
+/**
+ * The next page's token, looked for only where the posts are. The header's About panel carries a
+ * `continuationItemRenderer` of its own, and on the last page it is the only one in the response.
+ */
+private fun JsonElement.postListContinuation(): String? {
+    val root = objectOrNull() ?: return null
+    var token: String? = null
+    POST_LIST_ROOTS.forEach { key ->
+        root[key].forEachObject { node ->
+            if (token == null) token = node["continuationItemRenderer"].objectOrNull()?.continuationToken()
+        }
+    }
+    return token
+}
+
+private val POST_LIST_ROOTS = listOf("contents", "onResponseReceivedEndpoints", "onResponseReceivedActions", "continuationContents")
 
 internal fun JsonElement.toCommunityCommentsPage(): CommunityCommentsPage {
     val root = objectOrNull()
@@ -100,6 +125,7 @@ internal fun JsonElement.toCommunityCommentsPage(): CommunityCommentsPage {
 
     val comments = mutableListOf<Comment>()
     var continuation: String? = null
+    var sortOptions = emptyList<VideoCommentSort>()
 
     fun collect(element: JsonElement?) {
         when (element) {
@@ -148,6 +174,15 @@ internal fun JsonElement.toCommunityCommentsPage(): CommunityCommentsPage {
                         return
                     }
 
+                if (sortOptions.isEmpty()) {
+                    sortOptions =
+                        element["commentsHeaderRenderer"]
+                            .objectOrNull()
+                            ?.get("sortMenu")
+                            .objectOrNull()
+                            ?.toSortOptions()
+                            .orEmpty()
+                }
                 if (continuation == null) {
                     continuation =
                         element["continuationItemRenderer"]
@@ -168,6 +203,7 @@ internal fun JsonElement.toCommunityCommentsPage(): CommunityCommentsPage {
         comments = comments.distinctBy(Comment::id),
         continuation = continuation,
         commentCountText = findCommentCountText(root),
+        sortOptions = sortOptions,
     )
 }
 
@@ -197,8 +233,11 @@ internal fun JsonObject.toCommunityPost(
                 .youtubeText()
                 ?.takeIf(String::isNotBlank)
                 ?: fallbackAuthorName,
+        authorChannelId = authorChannelId() ?: owner.id.takeIf(String::isNotBlank),
         authorAvatarUrl = normalizeImageUrl(authorAvatar),
         text = this["contentText"].youtubeText().orEmpty(),
+        // Not tied to a video: a timestamp in a post names its video, so it opens that video at the time.
+        richText = this["contentText"].runsToRichText(ownVideoId = null) ?: this["contentText"].toRichText(ownVideoId = null),
         attachment = this["backstageAttachment"].toPostAttachment(owner),
         likeCountText = this["voteCount"].youtubeText().orEmpty(),
         commentCountText =
@@ -223,6 +262,23 @@ internal fun JsonObject.toCommunityPost(
         publishedTimeText = this["publishedTimeText"].youtubeText().orEmpty(),
     )
 }
+
+private fun JsonObject.authorChannelId(): String? =
+    (
+        this["authorEndpoint"]
+            ?: this["authorText"]
+                .objectOrNull()
+                ?.get("runs")
+                .arrayOrNull()
+                ?.firstOrNull()
+                .objectOrNull()
+                ?.get("navigationEndpoint")
+    ).objectOrNull()
+        ?.get("browseEndpoint")
+        .objectOrNull()
+        ?.get("browseId")
+        .stringOrNull()
+        ?.takeIf(String::isNotBlank)
 
 private fun findCommentCountText(root: JsonObject?): String? {
     val panels = root?.get("engagementPanels").arrayOrNull().orEmpty()

@@ -13,6 +13,7 @@ import io.github.aedev.flow.data.video.AutoDownloadResolution
 import io.github.aedev.flow.data.video.AutoDownloadTrigger
 import io.github.aedev.flow.player.EnhancedPlayerManager
 import io.github.aedev.flow.player.GlobalPlayerState
+import io.github.aedev.flow.player.analytics.VideoStartupTrace
 import io.github.aedev.flow.player.stream.PlaybackLoadResolver
 import io.github.aedev.flow.player.stream.PlaybackResolutionRequest
 import io.github.aedev.flow.player.stream.ResolvedPlayback
@@ -137,6 +138,7 @@ internal class PlaybackLoadController(
      * @param escalateToSabr If true (a 403-expiry reload), skip the fast direct-URL clients and
      *   extract straight through the durable WEB+PoToken+SABR path — fast clients return the same
      *   session-gated URLs that just 403'd, so re-trying them loops.
+     * @param freshStreams If true (a retry), never play an extraction kept from an earlier open.
      */
     fun load(
         videoId: String,
@@ -144,6 +146,7 @@ internal class PlaybackLoadController(
         forceRefresh: Boolean,
         escalateToSabr: Boolean,
         resumePositionOverrideMs: Long?,
+        freshStreams: Boolean = false,
     ) {
         notes.observe(videoId)
         if (LocalMediaIds.isLocal(videoId)) {
@@ -169,6 +172,7 @@ internal class PlaybackLoadController(
             return
         }
 
+        VideoStartupTrace.onRequested(videoId)
         refreshFeedExclusions()
         navigationHistory.push(videoId)
         _canGoPrevious.value = navigationHistory.canGoPrevious
@@ -203,11 +207,16 @@ internal class PlaybackLoadController(
                                 resumePositionOverrideMs = resumePositionOverrideMs,
                                 allowShorts = shortsEnabled,
                                 blockedChannelIds = exclusions.blockedChannelIds,
+                                freshStreams = freshStreams,
                             ),
                         isCurrent = { isCurrent(loadToken) },
                         resolveUpcoming = collaborators.upcomingPremiere::resolve,
                         onStep = { step ->
+                            VideoStartupTrace.onResolved(videoId)
                             sessionApplier.apply(step, load)
+                            if (step is ResolvedPlayback.VodFromInnerTube && isCurrent(loadToken)) {
+                                withContext(Dispatchers.Main) { collaborators.liveChat.startReplay(videoId) }
+                            }
                             // A download resumes from history inside the applier; a chosen time wins.
                             if (step is ResolvedPlayback.LocalCopyReady && resumePositionOverrideMs != null && isCurrent(loadToken)) {
                                 withContext(Dispatchers.Main) { playerManager.seekTo(resumePositionOverrideMs) }

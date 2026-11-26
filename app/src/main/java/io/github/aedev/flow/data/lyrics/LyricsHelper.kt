@@ -80,7 +80,10 @@ class LyricsHelper
         private val providerCooldowns = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
         private val unverifiedCleared =
-            ioScope.async(start = CoroutineStart.LAZY) { LyricsCacheManager.recheckUnverifiedOnce(context, LyricsChecks::hasWordSync) }
+            ioScope.async(start = CoroutineStart.LAZY) {
+                LyricsCacheManager.recheckUnverifiedOnce(context, LyricsChecks::hasWordSync)
+                LyricsCacheManager.recheckWordSyncedOnce(context, LyricsChecks::hasWordSync)
+            }
 
         // What each running song's run shows now, so a caller joining late still gets it.
         private val runAnswers = MutableStateFlow<Map<String, LyricsAnswer>>(emptyMap())
@@ -174,6 +177,11 @@ class LyricsHelper
                     LyricsCacheManager.clearManual(targetContext, videoId)
                 }
 
+                LyricsChecks.isInstrumentalNotice(saved) -> {
+                    Log.d(TAG, "Disk cache holds KuGou's instrumental notice for $videoId, discarding")
+                    LyricsCacheManager.evictLyrics(targetContext, videoId)
+                }
+
                 LyricsCacheManager.isManual(targetContext, videoId) -> {
                     cache[videoId] = saved
                     return saved to DISK_CACHE_NAME
@@ -186,7 +194,9 @@ class LyricsHelper
 
                 hasWordSync(saved) -> {
                     cache[videoId] = saved
-                    return saved to DISK_CACHE_NAME
+                    if (!LyricsCacheManager.isUnverified(targetContext, videoId)) return saved to DISK_CACHE_NAME
+                    Log.d(TAG, "Word-synced copy saved by an older version; looking again")
+                    savedCopy = LyricsAnswer(LyricsKind.WORD, saved, DISK_CACHE_NAME)
                 }
 
                 else -> {

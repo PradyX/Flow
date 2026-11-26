@@ -20,11 +20,15 @@ import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.exoplayer.util.EventLogger
 import io.github.aedev.flow.BuildConfig
 import io.github.aedev.flow.data.local.PlayerPreferences
+import io.github.aedev.flow.player.PlaybackPriority
+import io.github.aedev.flow.player.analytics.PlaybackSessionStats
 import io.github.aedev.flow.player.audio.shouldHandleAudioFocus
 import io.github.aedev.flow.player.config.PlayerConfig
 import io.github.aedev.flow.player.config.VideoSizeCap
+import io.github.aedev.flow.player.quality.ViewportTrackSelection
 import io.github.aedev.flow.player.renderer.CustomRenderersFactory
 import io.github.aedev.flow.player.subtitle.SubtitleDelay
+import io.github.aedev.flow.utils.NetworkState
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 
@@ -33,6 +37,7 @@ class PlayerFactory {
     companion object {
         private const val TAG = "PlayerFactory"
         private const val EVENT_LOG_TAG = "FlowVideoEvents"
+        private const val STATS_LOG_TAG = "FlowPlaybackStats"
     }
 
     private class CachedPrefs(
@@ -42,51 +47,49 @@ class PlayerFactory {
         val bufferForPlaybackMs: Int,
         val bufferRebufferMs: Int,
         val playDuringCalls: Boolean,
+        val bandwidthSeeds: Map<Int, Long>,
     )
 
     private var cachedPrefs: CachedPrefs? = null
 
-    private fun ensurePrefs(context: Context): CachedPrefs {
-        cachedPrefs?.let { return it }
-        val prefs = PlayerPreferences(context)
-        val result =
-            runBlocking {
-                CachedPrefs(
-                    audioLanguage = prefs.preferredAudioLanguage.first(),
-                    minBufferMs = prefs.minBufferMs.first(),
-                    maxBufferMs = prefs.maxBufferMs.first(),
-                    bufferForPlaybackMs = prefs.bufferForPlaybackMs.first(),
-                    bufferRebufferMs = prefs.bufferForPlaybackAfterRebufferMs.first(),
-                    playDuringCalls = prefs.playDuringCalls.first(),
-                )
-            }
-        cachedPrefs = result
-        return result
-    }
+    private fun ensurePrefs(context: Context): CachedPrefs = cachedPrefs ?: runBlocking { readPrefs(context) }.also { cachedPrefs = it }
 
     /** Drops the preferences read for the released player, so the next one is built with today's settings. */
     fun clearPreferences() {
         cachedPrefs = null
     }
 
-    suspend fun preloadPreferences(context: Context) {
-        if (cachedPrefs != null) return
-        val prefs = PlayerPreferences(context)
-        cachedPrefs =
-            CachedPrefs(
-                audioLanguage = prefs.preferredAudioLanguage.first(),
-                minBufferMs = prefs.minBufferMs.first(),
-                maxBufferMs = prefs.maxBufferMs.first(),
-                bufferForPlaybackMs = prefs.bufferForPlaybackMs.first(),
-                bufferRebufferMs = prefs.bufferForPlaybackAfterRebufferMs.first(),
-                playDuringCalls = prefs.playDuringCalls.first(),
-            )
+    /** How much of the next queued video to buffer, read each time one is queued so a Data Saver change applies. */
+    fun nextVideoPreloadConfiguration(context: Context): ExoPlayer.PreloadConfiguration {
+        val preloadUs = LoadControlFactory.nextVideoPreloadUs(ensurePrefs(context).bufferForPlaybackMs, NetworkState.isDataSaverOn(context))
+        return if (preloadUs > 0) ExoPlayer.PreloadConfiguration(preloadUs) else ExoPlayer.PreloadConfiguration.DEFAULT
     }
 
+    suspend fun preloadPreferences(context: Context) {
+        if (cachedPrefs == null) cachedPrefs = readPrefs(context)
+    }
+
+    private suspend fun readPrefs(context: Context): CachedPrefs {
+        val prefs = PlayerPreferences(context)
+        return CachedPrefs(
+            audioLanguage = prefs.preferredAudioLanguage.first(),
+            minBufferMs = prefs.minBufferMs.first(),
+            maxBufferMs = prefs.maxBufferMs.first(),
+            bufferForPlaybackMs = prefs.bufferForPlaybackMs.first(),
+            bufferRebufferMs = prefs.bufferForPlaybackAfterRebufferMs.first(),
+            playDuringCalls = prefs.playDuringCalls.first(),
+            bandwidthSeeds = freshSeeds(prefs),
+        )
+    }
+
+    private suspend fun freshSeeds(prefs: PlayerPreferences): Map<Int, Long> =
+        BandwidthSeeds.fresh(BandwidthSeeds.decode(prefs.bandwidthSeeds.first()), System.currentTimeMillis())
+
+    /** Seeded from this network type's last measured speed when recent, else Media3's per-country table. */
     fun createBandwidthMeter(context: Context): DefaultBandwidthMeter =
         DefaultBandwidthMeter
             .Builder(context)
-            .setInitialBitrateEstimate(PlayerConfig.INITIAL_BANDWIDTH_ESTIMATE)
+            .apply { ensurePrefs(context).bandwidthSeeds.forEach { (type, bits) -> setInitialBitrateEstimate(type, bits) } }
             .setResetOnNetworkTypeChange(true)
             .build()
 
@@ -95,7 +98,7 @@ class PlayerFactory {
         videoSizeCap: VideoSizeCap,
     ): DefaultTrackSelector {
         val trackSelectionFactory =
-            AdaptiveTrackSelection.Factory(
+            ViewportTrackSelection.Factory(
                 PlayerConfig.ABR_MIN_BUFFER_FOR_QUALITY_INCREASE_MS,
                 PlayerConfig.ABR_MAX_BUFFER_FOR_QUALITY_DECREASE_MS,
                 AdaptiveTrackSelection.DEFAULT_MIN_DURATION_TO_RETAIN_AFTER_DISCARD_MS,
@@ -170,15 +173,23 @@ class PlayerFactory {
                     .build(),
                 shouldHandleAudioFocus(prefs.playDuringCalls),
             ).setHandleAudioBecomingNoisy(true)
+            .setDeviceVolumeControlEnabled(true)
             .setLoadControl(loadControl)
+            .setPriorityTaskManager(PlaybackPriority.tasks)
             .setMediaSourceFactory(DefaultMediaSourceFactory(factory))
             .build()
             .also {
                 it.setSeekParameters(SeekParameters.CLOSEST_SYNC)
                 it.setWakeMode(C.WAKE_MODE_LOCAL)
+                it.preloadConfiguration = nextVideoPreloadConfiguration(context)
                 // Renderer, decoder, surface and stall events under one tag, so a stall can be
                 // timed from logcat instead of argued about (#1298).
-                if (BuildConfig.DEBUG) it.addAnalyticsListener(EventLogger(EVENT_LOG_TAG))
+                if (BuildConfig.DEBUG) {
+                    it.addAnalyticsListener(EventLogger(EVENT_LOG_TAG))
+                    it.addAnalyticsListener(
+                        PlaybackSessionStats(STATS_LOG_TAG, { (it.bufferedPosition - it.currentPosition).coerceAtLeast(0) }),
+                    )
+                }
                 Log.d(TAG, "ExoPlayer instance created")
             }
     }

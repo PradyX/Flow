@@ -1,5 +1,6 @@
 package io.github.aedev.flow.innertube
 
+import android.net.ConnectivityManager
 import android.util.Log
 import io.github.aedev.flow.FlowApplication
 import io.github.aedev.flow.data.local.PlayerPreferences
@@ -14,6 +15,8 @@ import io.github.aedev.flow.innertube.models.response.NextResponse
 import io.github.aedev.flow.innertube.models.response.PlayerResponse
 import io.github.aedev.flow.innertube.utils.parseCookieString
 import io.github.aedev.flow.innertube.utils.sha1
+import io.github.aedev.flow.network.FlowRequestLog
+import io.github.aedev.flow.network.SharedConnectionPool
 import io.ktor.client.*
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.*
@@ -25,7 +28,6 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
@@ -35,12 +37,13 @@ import kotlinx.serialization.json.putJsonObject
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
-import java.io.IOException
 import java.net.Proxy
 import java.util.*
 import kotlin.io.encoding.Base64
 
 private const val TAG = "InnerTube"
+
+private const val WATCH_OWNER_FIELDS = "contents.twoColumnWatchNextResults.results.results.contents.videoSecondaryInfoRenderer.owner"
 
 private val TIMED_COMMENTS_FILTER =
     buildJsonObject {
@@ -99,15 +102,9 @@ class InnerTube {
             httpClient = createClient()
         }
 
-    var cacheDirectory: java.io.File? = null
-        set(value) {
-            if (field == value) return
-            field = value
-            httpClient.close()
-            httpClient = createClient()
-        }
-
     var useLoginForBrowse: Boolean = false
+
+    internal var webClients = WebClients(fetchServiceWorker = ::getServiceWorker)
 
     private fun sanitizeLocale(value: YouTubeLocale): YouTubeLocale =
         YouTubeLocale(
@@ -155,14 +152,8 @@ class InnerTube {
             // PERFORMANCE OPTIMIZED: Enhanced network configuration
             engine {
                 config {
-                    // Aggressive connection pool for faster connection reuse
-                    connectionPool(
-                        okhttp3.ConnectionPool(
-                            15, // Increased from 10 - more connections available
-                            5, // keepAliveDuration
-                            java.util.concurrent.TimeUnit.MINUTES,
-                        ),
-                    )
+                    FlowRequestLog.install(this)
+                    connectionPool(SharedConnectionPool.pool)
 
                     // Faster timeout configurations - fail fast, retry smart
                     connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
@@ -182,14 +173,6 @@ class InnerTube {
                             maxRequests = 48
                             maxRequestsPerHost = 8
                         },
-                    )
-
-                    // Cache configuration for better performance
-                    cache(
-                        okhttp3.Cache(
-                            directory = cacheDirectory ?: java.io.File(System.getProperty("java.io.tmpdir"), "http_cache"),
-                            maxSize = 50L * 1024L * 1024L, // 50 MB
-                        ),
                     )
                 }
 
@@ -219,35 +202,19 @@ class InnerTube {
                 url(YouTubeClient.API_URL_YOUTUBE_MUSIC)
                 // Add common headers for better compatibility
                 header("Accept", "application/json")
-                header("Accept-Language", "en-US,en;q=0.9")
+                header(HttpHeaders.AcceptLanguage, acceptLanguage(locale.hl))
                 header("Cache-Control", "no-cache")
             }
         }
 
-    /**
-     * Simple retry wrapper for transient IO errors (socket aborts, timeouts).
-     * Retries the given block up to [maxAttempts] times with exponential backoff.
-     * Cancellation is respected since [delay] will throw if the coroutine is cancelled.
-     */
-    private suspend fun <T> withRetry(
-        maxAttempts: Int = 3,
-        initialDelay: Long = 500L,
-        factor: Double = 2.0,
-        block: suspend () -> T,
-    ): T {
-        var currentDelay = initialDelay
-        var attempt = 0
-        while (true) {
-            try {
-                return block()
-            } catch (e: IOException) {
-                attempt++
-                if (attempt >= maxAttempts) throw e
-                delay(currentDelay)
-                currentDelay = (currentDelay * factor).toLong()
-            }
-        }
-    }
+    private val retry = InnerTubeRetry(hasActiveNetwork = ::hasActiveNetwork)
+
+    private suspend fun <T : Any> withRetry(block: suspend () -> T): T = retry.run(block)
+
+    private fun hasActiveNetwork(): Boolean =
+        runCatching {
+            FlowApplication.appContext.getSystemService(ConnectivityManager::class.java)?.activeNetwork != null
+        }.getOrDefault(true)
 
     private fun HttpRequestBuilder.ytClient(
         client: YouTubeClient,
@@ -325,7 +292,6 @@ class InnerTube {
                         append(HttpHeaders.Origin, YouTubeClient.ORIGIN_YOUTUBE)
                         append("Referer", YouTubeClient.ORIGIN_YOUTUBE)
                         append(HttpHeaders.Cookie, "SOCS=CAE=")
-                        append(HttpHeaders.AcceptLanguage, "${locale.hl}, en;q=0.9")
                     } else {
                         append("X-Origin", YouTubeClient.ORIGIN_YOUTUBE)
                         append("Referer", YouTubeClient.REFERER_YOUTUBE)
@@ -349,18 +315,17 @@ class InnerTube {
 
     /**
      * Typeahead suggestions. Not an InnerTube endpoint — a JSONP array from the suggest host — but
-     * it rides the same client so it honours the app's locale, proxy and connection pool.
+     * it rides the same client so it honours the app's locale, proxy and connection pool. It never
+     * retries: a suggestion the user has typed past is worth nothing, and the next keystroke asks again.
      */
     suspend fun searchSuggestions(query: String) =
-        withRetry {
-            httpClient.get("https://suggestqueries-clients6.youtube.com/complete/search") {
-                parameter("client", "youtube")
-                parameter("ds", "yt")
-                parameter("hl", locale.hl)
-                parameter("gl", locale.gl)
-                parameter("q", query)
-                userAgent(YouTubeClient.WEB.userAgent)
-            }
+        httpClient.get("https://suggestqueries-clients6.youtube.com/complete/search") {
+            parameter("client", "youtube")
+            parameter("ds", "yt")
+            parameter("hl", locale.hl)
+            parameter("gl", locale.gl)
+            parameter("q", query)
+            userAgent(YouTubeClient.WEB.userAgent)
         }
 
     private suspend fun webBrowse(
@@ -463,6 +428,19 @@ class InnerTube {
         }
     }
 
+    /** The next page of a main-site panel whose continuation service is `/browse`. */
+    suspend fun webBrowseContinuation(
+        client: YouTubeClient,
+        continuation: String,
+    ) = webBrowse(client) { requestVisitorData ->
+        BrowseBody(
+            context = client.toContext(locale, requestVisitorData, null),
+            browseId = null,
+            params = null,
+            continuation = continuation,
+        )
+    }
+
     suspend fun postCommentsBrowse(
         client: YouTubeClient,
         postId: String? = null,
@@ -507,9 +485,11 @@ class InnerTube {
         poToken: String? = null,
         localeOverride: YouTubeLocale? = null,
         apiUrl: String? = null,
+        fieldMask: String? = null,
     ) = withRetry {
         httpClient.post(apiUrl?.let { "${it}player" } ?: "player") {
             ytClient(client, setLogin = true, apiUrl = apiUrl)
+            fieldMask?.let { header("X-Goog-FieldMask", it) }
             setBody(
                 PlayerBody(
                     context =
@@ -724,11 +704,44 @@ class InnerTube {
         parameter("prettyPrint", false)
     }
 
-    suspend fun nextForLiveChat(videoId: String) =
+    /**
+     * The watch page for [videoId] or one of its continuations, on the main site.
+     *
+     * The comment section and the chat seed only exist on the web watch response, so this posts to
+     * the main site rather than the music API the default request points at.
+     */
+    suspend fun nextWatch(
+        videoId: String? = null,
+        continuation: String? = null,
+        playlistId: String? = null,
+    ) = withRetry {
+        val client = webClients.live(YouTubeClient.WEB)
+        httpClient.post("https://www.youtube.com/youtubei/v1/next") {
+            webYouTubeHeaders(client)
+            setBody(
+                NextBody(
+                    context = client.toContext(locale, visitorData, null),
+                    videoId = videoId,
+                    playlistId = playlistId,
+                    playlistSetVideoId = null,
+                    index = null,
+                    params = null,
+                    continuation = continuation,
+                ),
+            )
+        }
+    }
+
+    /**
+     * The watch page's owner row alone, which is where a collaboration lists its channels and
+     * avatar stack: a couple of kilobytes instead of the whole page.
+     */
+    suspend fun watchOwner(videoId: String) =
         withRetry {
-            val client = YouTubeClient.WEB
+            val client = webClients.live(YouTubeClient.WEB)
             httpClient.post("https://www.youtube.com/youtubei/v1/next") {
                 webYouTubeHeaders(client)
+                header("X-Goog-FieldMask", WATCH_OWNER_FIELDS)
                 setBody(
                     NextBody(
                         context = client.toContext(locale, visitorData, null),
@@ -743,27 +756,18 @@ class InnerTube {
             }
         }
 
-    /**
-     * The watch page for [videoId] or one of its continuations, on the main site.
-     *
-     * The comment section only exists on the web watch response, so this posts to the same host
-     * and headers as [nextForLiveChat] rather than the music API the default request points at.
-     */
-    suspend fun nextWatch(
+    /** The watch page's refreshed counts and date, on the same host and headers as [nextWatch]. */
+    suspend fun updatedMetadata(
         videoId: String? = null,
         continuation: String? = null,
     ) = withRetry {
-        val client = YouTubeClient.WEB
-        httpClient.post("https://www.youtube.com/youtubei/v1/next") {
+        val client = webClients.live(YouTubeClient.WEB)
+        httpClient.post("https://www.youtube.com/youtubei/v1/updated_metadata") {
             webYouTubeHeaders(client)
             setBody(
-                NextBody(
+                UpdatedMetadataBody(
                     context = client.toContext(locale, visitorData, null),
                     videoId = videoId,
-                    playlistId = null,
-                    playlistSetVideoId = null,
-                    index = null,
-                    params = null,
                     continuation = continuation,
                 ),
             )
@@ -806,7 +810,7 @@ class InnerTube {
         videoId: String?,
         playlistId: String,
     ) = withRetry {
-        val client = YouTubeClient.WEB
+        val client = webClients.live(YouTubeClient.WEB)
         httpClient.post("https://www.youtube.com/youtubei/v1/next") {
             webYouTubeHeaders(client, visitor = null)
             setBody(
@@ -826,9 +830,11 @@ class InnerTube {
     suspend fun getLiveChat(
         continuation: String,
         offsetMs: Long? = null,
+        replay: Boolean = false,
     ) = withRetry {
-        val client = YouTubeClient.WEB
-        httpClient.post("https://www.youtube.com/youtubei/v1/live_chat/get_live_chat") {
+        val client = webClients.live(YouTubeClient.WEB)
+        val endpoint = if (replay) "get_live_chat_replay" else "get_live_chat"
+        httpClient.post("https://www.youtube.com/youtubei/v1/live_chat/$endpoint") {
             webYouTubeHeaders(client)
             setBody(
                 GetLiveChatBody(
@@ -846,16 +852,14 @@ class InnerTube {
     suspend fun getSearchSuggestions(
         client: YouTubeClient,
         input: String,
-    ) = withRetry {
-        httpClient.post("music/get_search_suggestions") {
-            ytClient(client)
-            setBody(
-                GetSearchSuggestionsBody(
-                    context = client.toContext(locale, visitorData, null),
-                    input = input,
-                ),
-            )
-        }
+    ) = httpClient.post("music/get_search_suggestions") {
+        ytClient(client)
+        setBody(
+            GetSearchSuggestionsBody(
+                context = client.toContext(locale, visitorData, null),
+                input = input,
+            ),
+        )
     }
 
     suspend fun getQueue(
@@ -892,6 +896,27 @@ class InnerTube {
     }
 
     suspend fun getSwJsData() = httpClient.get("https://music.youtube.com/sw.js_data")
+
+    /** Mints a new visitor: no visitorData goes out, so the answer is not the one in use. */
+    suspend fun visitorId(client: YouTubeClient) =
+        withRetry {
+            httpClient.post("https://www.youtube.com/youtubei/v1/visitor_id") {
+                webYouTubeHeaders(client, visitor = null)
+                setBody(VisitorIdBody(context = client.toContext(locale, null, null)))
+            }
+        }
+
+    /** The service worker [origin] serves to [userAgent]; it carries that site's client version. */
+    suspend fun getServiceWorker(
+        origin: String,
+        userAgent: String,
+    ): String =
+        httpClient
+            .get("$origin/sw.js") {
+                header("Origin", origin)
+                header("Referer", origin)
+                userAgent(userAgent)
+            }.bodyAsText()
 
     suspend fun accountMenu(client: YouTubeClient) =
         httpClient.post("account/account_menu") {
@@ -1178,7 +1203,7 @@ class InnerTube {
 
     suspend fun getMediaInfo(videoId: String): Result<MediaInfo> =
         runCatching {
-            val response = next(client = YouTubeClient.WEB, videoId, null, null, null, null, null).body<NextResponse>()
+            val response = next(client = webClients.live(YouTubeClient.WEB), videoId, null, null, null, null, null).body<NextResponse>()
             val playerResponse =
                 player(
                     client = YouTubeClient.ANDROID,

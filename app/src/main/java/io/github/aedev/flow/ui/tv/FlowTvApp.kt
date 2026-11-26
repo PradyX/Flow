@@ -25,10 +25,12 @@ import androidx.navigation.compose.rememberNavController
 import io.github.aedev.flow.data.model.Video
 import io.github.aedev.flow.player.EnhancedMusicPlayerManager
 import io.github.aedev.flow.player.GlobalPlayerState
+import io.github.aedev.flow.player.queue.QueuePageSource
 import io.github.aedev.flow.ui.components.music.common.ProvideMusicPlaybackState
 import io.github.aedev.flow.ui.components.music.sheet.LocalMusicMenus
 import io.github.aedev.flow.ui.components.music.sheet.MusicMenuSheets
 import io.github.aedev.flow.ui.components.music.sheet.rememberMusicMenus
+import io.github.aedev.flow.ui.components.settings.SettingsDestination
 import io.github.aedev.flow.ui.components.settings.SettingsTarget
 import io.github.aedev.flow.ui.components.shared.DpadReturnFocus
 import io.github.aedev.flow.ui.components.shared.LocalDpadReturnFocus
@@ -36,11 +38,8 @@ import io.github.aedev.flow.ui.components.shared.LocalFlowSheetPresenter
 import io.github.aedev.flow.ui.mediaNavigationLocals
 import io.github.aedev.flow.ui.screens.home.HomeViewModel
 import io.github.aedev.flow.ui.screens.music.MusicPlayerViewModel
-import io.github.aedev.flow.ui.screens.music.MusicViewModel
 import io.github.aedev.flow.ui.screens.player.VideoPlayerViewModel
 import io.github.aedev.flow.ui.screens.playon.PlayOnHost
-import io.github.aedev.flow.ui.screens.search.SearchViewModel
-import io.github.aedev.flow.ui.screens.subscriptions.SubscriptionsViewModel
 import io.github.aedev.flow.ui.tv.components.TvSheetPresenter
 import io.github.aedev.flow.ui.tv.music.TvMusicNowPlaying
 import io.github.aedev.flow.ui.tv.navigation.TvMediaNavigator
@@ -60,9 +59,6 @@ fun FlowTvApp(
     val activity = context as ComponentActivity
     val homeViewModel: HomeViewModel = hiltViewModel(activity)
     val playerViewModel: VideoPlayerViewModel = hiltViewModel(activity)
-    val subscriptionsViewModel: SubscriptionsViewModel = hiltViewModel(activity)
-    val searchViewModel: SearchViewModel = hiltViewModel(activity)
-    val musicViewModel: MusicViewModel = hiltViewModel(activity)
     val musicPlayerViewModel: MusicPlayerViewModel = hiltViewModel(activity)
     val shellViewModel: TvShellViewModel = hiltViewModel(activity)
     val navigation by shellViewModel.navigation.collectAsStateWithLifecycle()
@@ -78,9 +74,6 @@ fun FlowTvApp(
     LaunchedEffect(musicPlayerState.isPlaying) {
         if (musicPlayerState.isPlaying) musicSessionActive = true
     }
-    // Handoffs from other devices: the consent question, who took over, and the devices list.
-    PlayOnHost()
-
     // The shell leaves composition while a player covers it; this keeps its pages' scroll and saved state,
     // and the played card takes focus again when it comes back.
     val shellState = rememberSaveableStateHolder()
@@ -98,12 +91,13 @@ fun FlowTvApp(
         startIndex: Int,
         title: String,
         shuffle: Boolean,
+        more: QueuePageSource? = null,
     ) {
         val start = videos.getOrNull(startIndex) ?: return
         returnFocus.key = start.id
         EnhancedMusicPlayerManager.pause()
         GlobalPlayerState.setCurrentVideo(start)
-        playerViewModel.playPlaylist(videos, startIndex, title, shuffle)
+        playerViewModel.playPlaylist(videos, startIndex, title, shuffle, more)
     }
 
     // Metadata is resolved by playVideo -> loadVideoInfo; the stub only seeds the id.
@@ -156,6 +150,9 @@ fun FlowTvApp(
         onDeeplinkConsumed()
     }
 
+    // Handoffs from other devices: the consent question, who took over, and the devices list.
+    PlayOnHost(onManageDevices = { mediaNavigator.openSettings(SettingsTarget(SettingsDestination.SYNC)) })
+
     val musicMenus = rememberMusicMenus()
 
     FlowTvTheme {
@@ -185,10 +182,7 @@ fun FlowTvApp(
                                 navigation = tvNavigation,
                                 navController = navController,
                                 homeViewModel = homeViewModel,
-                                musicViewModel = musicViewModel,
                                 musicPlayerViewModel = musicPlayerViewModel,
-                                subscriptionsViewModel = subscriptionsViewModel,
-                                searchViewModel = searchViewModel,
                                 onPlayVideo = ::play,
                                 onPlayPlaylist = ::playPlaylist,
                                 onPlayVideoId = { playById(it) },

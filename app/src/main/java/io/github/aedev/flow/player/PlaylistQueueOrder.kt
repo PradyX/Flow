@@ -13,16 +13,34 @@ internal data class QueueRemoval<T>(
 )
 
 internal object PlaylistQueueOrder {
+    /** A queue whose later pages are still to come never wraps: its end isn't the end of the list. */
     fun nextIndex(
         itemCount: Int,
         currentIndex: Int,
         loopEnabled: Boolean,
+        morePending: Boolean = false,
     ): Int? =
         when {
             currentIndex < itemCount - 1 -> currentIndex + 1
-            loopEnabled && itemCount > 0 -> 0
+            loopEnabled && itemCount > 0 && !morePending -> 0
             else -> null
         }
+
+    /**
+     * [added] spread at random through the part of a shuffled queue not yet played. The video right
+     * after the current one keeps its place, since it may already be preloaded.
+     */
+    fun <T> mixIn(
+        items: List<T>,
+        currentIndex: Int,
+        added: List<T>,
+        random: Random = Random.Default,
+    ): List<T> {
+        val result = items.toMutableList()
+        val firstSlot = (currentIndex + 2).coerceIn(0, result.size)
+        added.forEach { item -> result.add(random.nextInt(firstSlot, result.size + 1), item) }
+        return result
+    }
 
     fun <T> shuffleFromCurrent(
         items: List<T>,
@@ -100,24 +118,25 @@ internal object PlaylistQueueOrder {
             ?: items.indexOfFirst { keySelector(it) == keySelector(target) }
 
     /**
-     * The `moveMediaItem(from, to)` calls, applied in order, that turn [current] into [target], or
-     * null when the two don't hold the same items.
+     * The indices of [current] that, taken in turn, make [target], with [currentIndex] standing for
+     * [targetIndex] so a repeated item never swaps in for the one playing. Null when the two don't
+     * hold the same items.
      */
-    fun <K> movesTo(
+    fun <K> indexOrder(
         current: List<K>,
+        currentIndex: Int,
         target: List<K>,
-    ): List<Pair<Int, Int>>? {
-        if (current.groupingBy { it }.eachCount() != target.groupingBy { it }.eachCount()) return null
-        val working = current.toMutableList()
-        val moves = mutableListOf<Pair<Int, Int>>()
-        target.forEachIndexed { toIndex, key ->
-            val fromIndex = (toIndex until working.size).first { working[it] == key }
-            if (fromIndex != toIndex) {
-                working.add(toIndex, working.removeAt(fromIndex))
-                moves += fromIndex to toIndex
-            }
+        targetIndex: Int,
+    ): List<Int>? {
+        if (current.size != target.size || current.getOrNull(currentIndex) != target.getOrNull(targetIndex)) return null
+        val free =
+            current.indices
+                .filter { it != currentIndex }
+                .groupBy { current[it] }
+                .mapValues { (_, indices) -> ArrayDeque(indices) }
+        return target.mapIndexed { index, key ->
+            if (index == targetIndex) currentIndex else free[key]?.removeFirstOrNull() ?: return null
         }
-        return moves
     }
 
     /** [items] put in the order of [order], or null when the two don't hold the same items. */

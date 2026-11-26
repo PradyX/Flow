@@ -52,14 +52,12 @@ class CommentsPagerTest {
         playbackState: MutableStateFlow<CommentsPlaybackState> = MutableStateFlow(CommentsPlaybackState.READY),
         isCurrentVideo: (String) -> Boolean = { true },
         fetchTimeoutMs: Long? = null,
-        prefetchPages: Int = 0,
     ) = CommentsPager(
-        repository = repository,
+        source = VideoCommentsSource(repository),
         scope = scope,
         playbackState = playbackState,
         isCurrentVideo = isCurrentVideo,
         fetchTimeoutMs = fetchTimeoutMs,
-        prefetchPages = prefetchPages,
     )
 
     @Test
@@ -220,44 +218,94 @@ class CommentsPagerTest {
         }
 
     @Test
-    fun `the prefetch walks a bounded number of further pages and then stops`() =
+    fun `the first page reads nothing ahead until the list is scrolled`() =
         runTest(testDispatcher) {
             val scope = CoroutineScope(testDispatcher)
             coEvery { repository.getVideoComments("vid_a", null) } returns
                 CommentsPageResult(comments = listOf(comment("c1")), continuation = "page_2")
-            coEvery { repository.getMoreVideoComments("vid_a", "page_2") } returns
-                CommentsPageResult(comments = listOf(comment("c2")), continuation = "page_3")
-            coEvery { repository.getMoreVideoComments("vid_a", "page_3") } returns
-                CommentsPageResult(comments = listOf(comment("c3")), continuation = "page_4")
-            coEvery { repository.getMoreVideoComments("vid_a", "page_4") } returns
-                CommentsPageResult(comments = listOf(comment("c4")), continuation = "page_5")
-            val pager = pager(scope, prefetchPages = 2)
+            val pager = pager(scope)
 
             pager.load("vid_a")
             advanceUntilIdle()
 
-            assertThat(pager.comments.value.map { it.id }).containsExactly("c1", "c2", "c3").inOrder()
-            coVerify(exactly = 0) { repository.getMoreVideoComments("vid_a", "page_4") }
+            assertThat(pager.comments.value.map { it.id }).containsExactly("c1")
             assertThat(pager.hasMore.value).isTrue()
+            coVerify(exactly = 0) { repository.getMoreVideoComments(any(), any()) }
             scope.cancel()
         }
 
     @Test
-    fun `the prefetch stops at the end of the section`() =
+    fun `picking the order already showing keeps the loaded pages`() =
         runTest(testDispatcher) {
             val scope = CoroutineScope(testDispatcher)
-            coEvery { repository.getVideoComments("vid_a", null) } returns
+            val newest = VideoCommentSort("Newest", "newest", selected = false)
+            coEvery { repository.getVideoComments("vid_a", "newest") } returns
                 CommentsPageResult(comments = listOf(comment("c1")), continuation = "page_2")
             coEvery { repository.getMoreVideoComments("vid_a", "page_2") } returns
-                CommentsPageResult(comments = listOf(comment("c2")))
-            val pager = pager(scope, prefetchPages = 3)
+                CommentsPageResult(comments = listOf(comment("c2")), continuation = "page_3")
+            val pager = pager(scope)
 
-            pager.load("vid_a")
+            pager.selectSort("vid_a", newest)
+            advanceUntilIdle()
+            pager.loadMore("vid_a")
+            advanceUntilIdle()
+            pager.selectSort("vid_a", newest)
             advanceUntilIdle()
 
             assertThat(pager.comments.value.map { it.id }).containsExactly("c1", "c2").inOrder()
+            coVerify(exactly = 1) { repository.getVideoComments("vid_a", "newest") }
+            coVerify(exactly = 0) { repository.getMoreVideoComments("vid_a", "page_3") }
+            scope.cancel()
+        }
+
+    @Test
+    fun `oldest reads newest to its end and shows the list once it has`() =
+        runTest(testDispatcher) {
+            val scope = CoroutineScope(testDispatcher)
+            val newest = VideoCommentSort("Newest", "newest", selected = false)
+            coEvery { repository.getVideoComments("vid_a", "newest") } returns
+                CommentsPageResult(comments = listOf(comment("c1")), continuation = "page_2")
+            coEvery { repository.getMoreVideoComments("vid_a", "page_2") } returns
+                CommentsPageResult(comments = listOf(comment("c2")), continuation = "page_3")
+            coEvery { repository.getMoreVideoComments("vid_a", "page_3") } returns
+                CommentsPageResult(comments = listOf(comment("c3")))
+            val pager = pager(scope)
+
+            pager.selectOldest("vid_a", newest)
+            advanceUntilIdle()
+
+            assertThat(pager.comments.value.map { it.id }).containsExactly("c1", "c2", "c3").inOrder()
             assertThat(pager.hasMore.value).isFalse()
-            coVerify(exactly = 1) { repository.getMoreVideoComments("vid_a", "page_2") }
+            assertThat(pager.isLoading.value).isFalse()
+            assertThat(pager.oldestCapped.value).isFalse()
+
+            pager.selectOldest("vid_a", newest)
+            advanceUntilIdle()
+            coVerify(exactly = 1) { repository.getVideoComments("vid_a", "newest") }
+            scope.cancel()
+        }
+
+    @Test
+    fun `oldest stops at its page limit and says it did`() =
+        runTest(testDispatcher) {
+            val scope = CoroutineScope(testDispatcher)
+            coEvery { repository.getVideoComments("vid_a", "newest") } returns
+                CommentsPageResult(comments = listOf(comment("p1")), continuation = "p2")
+            coEvery { repository.getMoreVideoComments("vid_a", any()) } answers {
+                val page = secondArg<String>().removePrefix("p").toInt()
+                CommentsPageResult(comments = listOf(comment("p$page")), continuation = "p${page + 1}")
+            }
+            val pager = pager(scope)
+
+            pager.selectOldest("vid_a", VideoCommentSort("Newest", "newest", selected = false))
+            advanceUntilIdle()
+
+            assertThat(pager.comments.value).hasSize(OLDEST_PAGE_LIMIT)
+            assertThat(pager.oldestCapped.value).isTrue()
+            coVerify(exactly = OLDEST_PAGE_LIMIT - 1) { repository.getMoreVideoComments("vid_a", any()) }
+
+            pager.selectSort("vid_a", VideoCommentSort("Top", "top", selected = true))
+            assertThat(pager.oldestCapped.value).isFalse()
             scope.cancel()
         }
 
@@ -553,7 +601,7 @@ class CommentsPagerTest {
             val scope = CoroutineScope(testDispatcher)
             coEvery { repository.getVideoComments("vid_a", null) } returns CommentsPageResult.DISABLED
             coEvery { repository.getVideoComments("vid_b", null) } returns CommentsPageResult(comments = listOf(comment("c1")))
-            val pager = pager(scope, prefetchPages = 3)
+            val pager = pager(scope)
 
             pager.load("vid_a")
             advanceUntilIdle()

@@ -36,9 +36,12 @@ import io.github.aedev.flow.data.model.Comment
 import io.github.aedev.flow.data.model.LiveChatMessage
 import io.github.aedev.flow.data.model.Video
 import io.github.aedev.flow.data.model.toVideo
-import io.github.aedev.flow.data.model.uploadDateMillis
+import io.github.aedev.flow.innertube.models.response.VideoChapter
 import io.github.aedev.flow.player.EnhancedPlayerManager
+import io.github.aedev.flow.player.RepeatMode
 import io.github.aedev.flow.player.state.EnhancedPlayerState
+import io.github.aedev.flow.player.videoRepeatMode
+import io.github.aedev.flow.ui.components.layout.navigation.LocalMediaNavigator
 import io.github.aedev.flow.ui.components.shared.FlowDescriptionBottomSheet
 import io.github.aedev.flow.ui.components.shared.FlowNoteEditorDialog
 import io.github.aedev.flow.ui.components.shared.MediaDownloadPrompt
@@ -46,6 +49,7 @@ import io.github.aedev.flow.ui.components.shared.MediaSheetSlot
 import io.github.aedev.flow.ui.components.shared.MediaSleepTimerSheet
 import io.github.aedev.flow.ui.components.shared.commentTimestampToMs
 import io.github.aedev.flow.ui.components.shared.defaultSheetExpandedHeight
+import io.github.aedev.flow.ui.components.shared.oldestCommentsNote
 import io.github.aedev.flow.ui.components.shared.quickactions.QuickActionUndo
 import io.github.aedev.flow.ui.components.shared.quickactions.sharedQuickActionsViewModel
 import io.github.aedev.flow.ui.components.shared.rememberDateDisplaySettings
@@ -67,7 +71,6 @@ import io.github.aedev.flow.ui.screens.player.state.transcriptTrackUrl
 import io.github.aedev.flow.ui.screens.player.state.visibleComments
 import io.github.aedev.flow.utils.DateContext
 import kotlinx.coroutines.launch
-import org.schabi.newpipe.extractor.stream.StreamSegment
 
 /**
  * The surfaces the portrait bottom-sheet slot, the landscape fullscreen side panel and the tablet
@@ -77,7 +80,7 @@ import org.schabi.newpipe.extractor.stream.StreamSegment
 @Composable
 internal fun PlayerChaptersSheetHost(
     screenState: PlayerScreenState,
-    chapters: List<StreamSegment>,
+    chapters: List<VideoChapter>,
     thumbnailUrl: String,
     asSidePanel: Boolean,
     expandedHeight: Dp?,
@@ -93,7 +96,7 @@ internal fun PlayerChaptersSheetHost(
         currentPosition = chaptersPositionMs,
         durationMs = screenState.duration,
         onChapterClick = { newPosition ->
-            EnhancedPlayerManager.getInstance().seekTo(newPosition)
+            EnhancedPlayerManager.getInstance().seekTo(newPosition, exact = true)
         },
         onDismiss = onDismiss,
         thumbnailUrl = thumbnailUrl,
@@ -126,9 +129,12 @@ internal fun PlayerQueueSheetHost(
         queueVideos = queueVideos,
         currentQueueIndex = currentQueueIndex,
         playlistTitle = playerState.queueTitle,
-        isLooping = playerState.isQueueLooping,
+        repeatMode = videoRepeatMode(queueLoop = playerState.isQueueLooping, videoLoop = playerState.isLooping),
         isShuffled = playerState.isQueueShuffled,
-        onLoopToggle = manager::toggleQueueLoop,
+        onRepeatModeChange = { mode ->
+            manager.toggleLoop(mode == RepeatMode.ONE)
+            if (playerState.isQueueLooping != (mode == RepeatMode.ALL)) manager.toggleQueueLoop(mode == RepeatMode.ALL)
+        },
         onShuffleToggle = manager::toggleQueueShuffle,
         onPlayVideoAtIndex = { index -> manager.playVideoAtIndex(index, loadStreamsInPlayer = loadStreamsInPlayer) },
         onRemoveVideoAtIndex = { index ->
@@ -166,13 +172,16 @@ internal fun PlayerDescriptionSheetHost(
     val videoNote by viewModel.videoNote.collectAsStateWithLifecycle()
     val videoNotesEnabled by viewModel.videoNotesEnabled.collectAsStateWithLifecycle()
     var showNoteEditor by rememberSaveable(video.id) { mutableStateOf(false) }
+    val navigator = LocalMediaNavigator.current
     LaunchedEffect(video.id) {
         viewModel.loadDescription(video.id)
     }
     FlowDescriptionBottomSheet(
         video = video,
+        onHashtagClick = { tag -> navigator.openSearch("#$tag") },
         descriptionPage = descriptionPage,
         tags = (listOfNotNull(video.category) + video.tags).distinct(),
+        showLikes = uiState.ratingsAllowed,
         chapterCount = uiState.chapters.size,
         onChaptersClick = onChaptersClick,
         onTranscriptClick = onTranscriptClick?.takeIf { hasTranscriptTrack },
@@ -180,7 +189,7 @@ internal fun PlayerDescriptionSheetHost(
         onEditNote = { showNoteEditor = true }.takeIf { videoNotesEnabled },
         onChannelClick = onChannelClick,
         artworkUrl = video.thumbnailUrl,
-        onSeekMs = { EnhancedPlayerManager.getInstance().seekTo(it) },
+        onSeekMs = { EnhancedPlayerManager.getInstance().seekTo(it, exact = true) },
         expandedHeight = expandedHeight,
         collapsedHeight = collapsedHeight,
         enableVerticalDismiss = !asSidePanel,
@@ -207,7 +216,7 @@ internal fun PlayerTranscriptSheetHost(
     screenState: PlayerScreenState,
     playerState: EnhancedPlayerState,
     prefs: VideoPlayerPreferencesState,
-    chapters: List<StreamSegment>,
+    chapters: List<VideoChapter>,
     artworkUrl: String?,
     exportTitle: String?,
     asSidePanel: Boolean,
@@ -235,7 +244,7 @@ internal fun PlayerTranscriptSheetHost(
         isLoading = transcript.isLoading,
         currentPositionMs = { screenState.currentPosition },
         artworkUrl = artworkUrl,
-        onSeekMs = { EnhancedPlayerManager.getInstance().seekTo(it) },
+        onSeekMs = { EnhancedPlayerManager.getInstance().seekTo(it, exact = true) },
         onDismiss = onDismiss,
         chapters = transcriptChapters,
         tracks = tracks,
@@ -321,6 +330,8 @@ internal fun PlayerCommentsPanelHost(
         isLoadingMore = commentsUiState.isLoadingMore,
         hasMore = commentsUiState.hasMore,
         selectedFilter = screenState.commentSortFilter,
+        sortOptions = commentsUiState.sortOptions,
+        sortNote = oldestCommentsNote(screenState.commentSortFilter, commentsUiState.oldestCapped, commentsUiState.comments.size),
         totalText = commentsUiState.totalText,
         artworkUrl = artworkUrl,
         showTimed = true,
@@ -328,7 +339,7 @@ internal fun PlayerCommentsPanelHost(
         onFilterChanged = { filter ->
             commentsUiState.selectCommentSort(filter, videoId, screenState, viewModel)
         },
-        onSeekMs = { EnhancedPlayerManager.getInstance().seekTo(it) },
+        onSeekMs = { EnhancedPlayerManager.getInstance().seekTo(it, exact = true) },
         onLoadReplies = { viewModel.loadCommentReplies(it) },
         onLoadMoreReplies = { viewModel.loadMoreCommentReplies(it) },
         onAuthorClick = { authorChannelRef ->
@@ -350,6 +361,7 @@ internal fun PlayerLiveChatColumn(
     isLoading: Boolean,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    isReplay: Boolean = false,
 ) {
     Column(modifier.fillMaxHeight()) {
         Row(
@@ -360,7 +372,7 @@ internal fun PlayerLiveChatColumn(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = stringResource(R.string.live_chat),
+                text = stringResource(if (isReplay) R.string.chat_replay else R.string.live_chat),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )

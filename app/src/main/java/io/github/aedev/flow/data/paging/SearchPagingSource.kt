@@ -27,7 +27,9 @@ import kotlin.coroutines.CoroutineContext
  * out of the same response. The watched filter is the exception: it is applied here, so a page it
  * thins out reads on, up to [MAX_REQUESTS_PER_LOAD] requests, rather than reaching the grid nearly empty.
  * Paging asks again while the list is short, so after [MAX_EMPTY_LOADS] loads in a row that kept
- * nothing the search ends there instead of walking every page YouTube has.
+ * nothing, whether the watched filter, blocking or de-duplication emptied them, the search ends there
+ * instead of walking every page YouTube has. A page that hands back the token it was loaded with ends
+ * it too: Paging refuses the same key twice in a row.
  */
 class SearchPagingSource(
     private val query: String,
@@ -36,6 +38,7 @@ class SearchPagingSource(
     private val onHeader: (SearchHeader) -> Unit = {},
     private val loadPage: SearchPageLoader = DefaultSearchPageLoader,
     private val watchedVideos: WatchedVideoLookup = WatchedVideoLookup { emptySet() },
+    private val exactQuery: Boolean = false,
     private val loadContext: CoroutineContext = PerformanceDispatcher.networkIO,
     private val exclusions: suspend () -> FeedExclusions = { FeedExclusions.NONE },
 ) : PagingSource<String, SearchResultItem>() {
@@ -57,7 +60,8 @@ class SearchPagingSource(
             var continuation = params.key
             var requests = 0
             do {
-                val page = loadPage(query, filter.toSearchParams(), continuation)
+                val requested = continuation
+                val page = loadPage(query, filter.toSearchParams(exactQuery), requested)
                 if (params.key == null && requests == 0) onHeader(page.header)
                 requests++
                 val items =
@@ -68,15 +72,14 @@ class SearchPagingSource(
                     }.withoutHidden(hidden)
                 results +=
                     loadedItemKeys.filter(items.watchFiltered()) { it.identityKey() }
-                continuation = page.continuation
+                continuation = page.continuation.takeUnless { it == requested }
             } while (watchState != WatchState.ANY &&
                 results.size < MIN_FILTERED_PAGE &&
                 continuation != null &&
                 requests < MAX_REQUESTS_PER_LOAD
             )
             emptyLoadsInARow = if (results.isEmpty()) emptyLoadsInARow + 1 else 0
-            val exhausted = watchState != WatchState.ANY && emptyLoadsInARow >= MAX_EMPTY_LOADS
-            LoadResult.Page(data = results, prevKey = null, nextKey = continuation.takeUnless { exhausted })
+            LoadResult.Page(data = results, prevKey = null, nextKey = continuation.takeUnless { emptyLoadsInARow >= MAX_EMPTY_LOADS })
         } catch (e: Exception) {
             LoadResult.Error(e)
         }
@@ -164,14 +167,13 @@ internal fun SearchResultsPage.toShortsResults(shortsEnabled: Boolean): List<Sea
 
 /**
  * Drops everything a blocked creator put in the results, the way the home feed already drops them
- * before ranking: their own card, their videos, and their videos inside a strip. A video marked not
- * interested goes too. A strip left with nothing goes, rather than staying as a heading over a gap.
+ * before ranking: their own card, their videos and posts, and their videos inside a strip. A video
+ * marked not interested goes too. A strip left with nothing goes, rather than staying as a heading
+ * over a gap.
  *
  * Only what the viewer hid outright applies: a search is an explicit ask, so the engine's inferred
  * suppressions and blocked topics do not filter it. The AI channel list does, when its hide switch is
  * on; a channel result stays, and only teaches the list which handle its id has.
- *
- * Community posts carry no channel id in the response, so a blocked creator's post survives here.
  */
 internal fun List<SearchResultItem>.withoutHidden(exclusions: FeedExclusions): List<SearchResultItem> {
     if (exclusions.isEmpty) return this
@@ -193,9 +195,10 @@ internal fun List<SearchResultItem>.withoutHidden(exclusions: FeedExclusions): L
 
             is SearchResultItem.ShelfResult -> {
                 val videos = item.videos.filterNot { exclusions.hides(it) || exclusions.hidesAsAi(it) }
+                val posts = item.posts.filterNot { exclusions.hidesChannel(it.authorChannelId.orEmpty()) }
                 when {
                     videos.isNotEmpty() -> item.copy(videos = videos)
-                    item.posts.isNotEmpty() -> item
+                    posts.isNotEmpty() -> item.copy(posts = posts)
                     else -> null
                 }
             }

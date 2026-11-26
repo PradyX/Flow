@@ -12,6 +12,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Fallback popup player for devices whose ROM does not expose native Android PiP. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -66,6 +67,18 @@
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="https" />
         </intent>
+        <!-- Translator apps, for Translate on comments and descriptions and in the text selection menu (#892). -->
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TRANSLATE" />
+        </intent>
+        <!-- Speech input apps, so search hides the mic when none is installed (#2252). -->
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
     </queries>
 
     <application
@@ -82,6 +95,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Flow"
         android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:resizeableActivity="true"
         android:requestLegacyExternalStorage="true"
         android:enableOnBackInvokedCallback="true">
@@ -159,6 +173,7 @@
                 <data android:pathPrefix="/c" />
                 <data android:pathPrefix="/user" />
                 <data android:pathPrefix="/@" />
+                <data android:pathPrefix="/post/" />
             </intent-filter>
 
             <intent-filter>
@@ -255,6 +270,12 @@
         <receiver
             android:name=".data.video.downloader.work.DownloadActionReceiver"
             android:exported="false" />
+
+        <!-- Android 14+: the download queue as a user-initiated data transfer job. -->
+        <service
+            android:name=".data.video.downloader.work.DownloadJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <!-- Device Sync (FLOW-SYNC/1) foreground service: keeps the LAN WebSocket
              transfer alive while the screen is off / app is backgrounded. -->

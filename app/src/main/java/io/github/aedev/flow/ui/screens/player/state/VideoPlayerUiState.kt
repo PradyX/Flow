@@ -2,19 +2,28 @@ package io.github.aedev.flow.ui.screens.player.state
 
 import io.github.aedev.flow.data.local.VideoQuality
 import io.github.aedev.flow.data.model.LiveChatMessage
+import io.github.aedev.flow.data.model.RelatedCollection
 import io.github.aedev.flow.data.model.SponsorBlockSegment
 import io.github.aedev.flow.data.model.Video
 import io.github.aedev.flow.innertube.models.response.PaidPromotionLabel
 import io.github.aedev.flow.innertube.models.response.PlayerResponse
+import io.github.aedev.flow.innertube.models.response.VideoChapter
 import io.github.aedev.flow.innertube.models.response.VideoHeatmap
+import io.github.aedev.flow.innertube.pages.WatchPageHeader
 import io.github.aedev.flow.player.stream.StoryboardLevel
-import org.schabi.newpipe.extractor.stream.AudioStream
-import org.schabi.newpipe.extractor.stream.StreamSegment
-import org.schabi.newpipe.extractor.stream.VideoStream
+import io.github.aedev.flow.player.stream.model.AudioStream
+import io.github.aedev.flow.player.stream.model.VideoStream
 
 data class VideoPlayerUiState(
     val cachedVideo: Video? = null,
     val relatedVideos: List<Video> = emptyList(),
+    /** YouTube's next pick when it heads [relatedVideos], for the lane to label it. */
+    val upNextVideoId: String? = null,
+    /** The next related page; null once the lane has reached its end. */
+    val relatedContinuation: String? = null,
+    val relatedAppend: RelatedAppend = RelatedAppend.IDLE,
+    /** Playlists, Mixes and Shorts shelves placed among [relatedVideos]; autoplay never reads them. */
+    val relatedCollections: List<RelatedCollection> = emptyList(),
     val videoStream: VideoStream? = null,
     val audioStream: AudioStream? = null,
     val availableQualities: List<VideoQuality> = emptyList(),
@@ -34,10 +43,12 @@ data class VideoPlayerUiState(
     val streamClient: String? = null,
     val paidPromotion: PaidPromotionLabel? = null,
     val channelAvatarUrl: String? = null,
-    val chapters: List<StreamSegment> = emptyList(),
+    val chapters: List<VideoChapter> = emptyList(),
     val storyboard: List<StoryboardLevel> = emptyList(),
     /** A livestream that has ended: its date reads "Streamed …" rather than a plain date. */
     val isArchivedLivestream: Boolean = false,
+    /** False when the creator hides the video's likes, so no like or dislike count is shown. */
+    val ratingsAllowed: Boolean = true,
     val heatmap: VideoHeatmap? = null,
     val autoplayEnabled: Boolean = true,
     val streamSizes: Map<String, Long> = emptyMap(),
@@ -61,6 +72,7 @@ data class VideoPlayerUiState(
     val isLiveChatAvailable: Boolean = false,
     val liveChatMessages: List<LiveChatMessage> = emptyList(),
     val isLiveChatLoading: Boolean = false,
+    val watchHeader: WatchPageHeader? = null,
 ) {
     /**
      * The state to show while [video] is being armed: its metadata, and every field that describes
@@ -84,6 +96,10 @@ data class VideoPlayerUiState(
             streamSizes = emptyMap(),
             savedPosition = null,
             relatedVideos = emptyList(),
+            upNextVideoId = null,
+            relatedContinuation = null,
+            relatedAppend = RelatedAppend.IDLE,
+            relatedCollections = emptyList(),
             isSubscribed = isSubscribed && video.channelId.isNotBlank() && video.channelId == cachedVideo?.channelId,
             likeState = likeState.takeIf { video.id == cachedVideo?.id },
             hlsUrl = null,
@@ -95,5 +111,10 @@ data class VideoPlayerUiState(
             chapters = emptyList(),
             heatmap = null,
             storyboard = emptyList(),
+            ratingsAllowed = true,
+            watchHeader = null,
         )
 }
+
+/** Where the next related page stands: a failure waits for a retry rather than asking again by itself. */
+enum class RelatedAppend { IDLE, LOADING, FAILED }

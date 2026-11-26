@@ -14,26 +14,28 @@ import io.github.aedev.flow.data.local.LikedVideosRepository
 import io.github.aedev.flow.data.local.PlayerPreferences
 import io.github.aedev.flow.data.local.PlaylistRepository
 import io.github.aedev.flow.data.local.PlaylistSwipes
+import io.github.aedev.flow.data.local.SavedPlaylistSyncStore
 import io.github.aedev.flow.data.local.WatchLaterCleanup
 import io.github.aedev.flow.data.local.dao.DownloadCollectionSummary
-import io.github.aedev.flow.data.local.entity.DownloadCollectionKind
 import io.github.aedev.flow.data.migration.WatchLaterMetadataMigrator
 import io.github.aedev.flow.data.model.PlaylistInfo
 import io.github.aedev.flow.data.model.Video
 import io.github.aedev.flow.data.music.YouTubeMusicService
 import io.github.aedev.flow.data.playlist.PlaylistFileCodec
 import io.github.aedev.flow.data.playlist.PlaylistTransfer
-import io.github.aedev.flow.data.repository.RemotePlaylistPage
+import io.github.aedev.flow.data.repository.PlaylistQueueSources
 import io.github.aedev.flow.data.repository.YouTubePlaylistRepository
 import io.github.aedev.flow.data.repository.YouTubeRepository
-import io.github.aedev.flow.data.repository.walkPlaylistPages
 import io.github.aedev.flow.data.video.BackgroundDownloadQueuer
 import io.github.aedev.flow.data.video.DownloadBatch
-import io.github.aedev.flow.data.video.downloader.collection.CollectionSpec
 import io.github.aedev.flow.data.video.downloader.collection.DownloadedCollections
+import io.github.aedev.flow.data.video.downloader.collection.OfflineCollection
+import io.github.aedev.flow.innertube.pages.YouTubeAlertException
+import io.github.aedev.flow.player.queue.QueuePageSource
 import io.github.aedev.flow.ui.components.library.PlaylistSortOrder
 import io.github.aedev.flow.ui.components.library.sortedForPlaylist
 import io.github.aedev.flow.ui.components.shared.quickactions.QuickActionUndo
+import io.github.aedev.flow.utils.NetworkState
 import io.github.aedev.flow.utils.PerformanceDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -44,8 +46,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -77,6 +77,8 @@ class PlaylistDetailViewModel
         private val likedVideos: LikedVideosRepository,
         private val likedMedia: LikedMediaUseCase,
         private val collections: DownloadedCollections,
+        savedPlaylistChecks: SavedPlaylistSyncStore,
+        private val queueSources: PlaylistQueueSources,
         savedStateHandle: SavedStateHandle,
     ) : ViewModel() {
         val playlistId: String = checkNotNull(savedStateHandle["playlistId"])
@@ -118,52 +120,59 @@ class PlaylistDetailViewModel
                 .getUserCreatedVideoPlaylistsFlow()
                 .stateIn(viewModelScope, sharing, emptyList())
 
+        private val remote = RemotePlaylistSession(viewModelScope, playlistId, playlistRepository, _uiState)
+
+        private val downloads =
+            PlaylistDownloads(viewModelScope, playlistId, downloadQueuer, playlistRepository, collections) { _messages.send(it) }
+
+        private val savedRefresh = SavedPlaylistRefresh(playlistId, repository, playlistRepository, savedPlaylistChecks)
+
         /** This playlist as a downloaded collection, or null when it was never downloaded as one. */
-        val downloadedCollection: StateFlow<DownloadCollectionSummary?> =
-            collections
-                .observe(
-                    playlistId,
-                ).stateIn(viewModelScope, sharing, null)
+        val downloadedCollection: StateFlow<DownloadCollectionSummary?> get() = downloads.downloaded
 
         /** The running or just-finished "Download all" for this playlist. */
-        val downloadBatch: StateFlow<DownloadBatch?> =
-            downloadQueuer.batches
-                .map { it[playlistId] }
-                .stateIn(viewModelScope, sharing, null)
+        val downloadBatch: StateFlow<DownloadBatch?> get() = downloads.batch
+
+        /** Videos added to this downloaded playlist since it was last downloaded. */
+        val newSinceDownload: StateFlow<Int> =
+            downloads.newVideos(
+                _uiState
+                    .map { state ->
+                        state.videos.takeUnless { state.isLoading || state.hasMorePages }
+                    }.distinctUntilChanged(),
+            )
+
+        fun downloadNew() {
+            viewModelScope.launch { downloads.downloadNew(loadedState()) }
+        }
 
         init {
             loadPlaylist()
-            viewModelScope.launch {
-                downloadQueuer.batches
-                    .map { it[playlistId] }
-                    .filterNotNull()
-                    .filter { it.isFinished }
-                    .collect { batch ->
-                        _messages.send(
-                            if (batch.queued > 0) {
-                                PlaylistUiMessage(stringRes = R.string.playlist_downloads_queued, args = listOf(batch.queued, batch.total))
-                            } else {
-                                PlaylistUiMessage(stringRes = R.string.playlist_download_queue_empty)
-                            },
-                        )
-                        downloadQueuer.clearBatch(playlistId)
-                    }
-            }
         }
 
         fun setSortOrder(order: PlaylistSortOrder) {
+            if (order != PlaylistSortOrder.MANUAL) remote.loadAll()
             viewModelScope.launch {
                 playerPreferences.setPlaylistSortOrder(playlistId, order.storageValue)
             }
         }
 
         fun retry() {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            _uiState.update { it.copy(isLoading = true, errorMessage = null, isGone = false) }
             loadPlaylist()
+        }
+
+        /** Loads the next page of a YouTube playlist as its list nears the end. */
+        fun loadMore() = remote.loadMore()
+
+        /** Loads every page of a YouTube playlist, for a feature that needs the whole list. */
+        fun loadAll() {
+            remote.loadAll()
         }
 
         fun saveToLibrary() {
             viewModelScope.launch {
+                remote.awaitAll()
                 val state = _uiState.value
                 val thumbnailUrl = state.thumbnailUrl.ifEmpty { state.videos.firstOrNull()?.thumbnailUrl ?: "" }
                 if (state.isFromMusic) {
@@ -290,32 +299,36 @@ class PlaylistDetailViewModel
             return transfer.shareableCopy(state.playlistName, state.description, state.videos)
         }
 
-        /**
-         * Downloads the whole playlist as one item in its own folder, once every page has arrived;
-         * a second download picks up only what is new.
-         */
-        fun downloadPlaylist() {
+        /** The videos a "Download all" starts with unpicked, once the first page is in; null for an empty playlist. */
+        suspend fun downloadLeftOut(): Set<String>? {
+            remote.loadAll()
+            return downloads.leftOutLastTime(_uiState.first { !it.isLoading })
+        }
+
+        /** Downloads every video but [leftOut], including pages still loading. */
+        fun downloadAllExcept(leftOut: Set<String>) {
             viewModelScope.launch {
-                val state = _uiState.first { !it.isLoading && !it.isLoadingMore }
-                val videos = state.videos
-                if (videos.isEmpty()) {
-                    _messages.send(PlaylistUiMessage(stringRes = R.string.ui_playlist_empty))
-                    return@launch
-                }
-                _messages.send(
-                    PlaylistUiMessage(pluralRes = R.plurals.ui_downloading_videos, count = videos.size, args = listOf(videos.size)),
-                )
-                val isLocal = state.isLocalPlaylist || state.isWatchLater || state.isLikes
-                val spec =
-                    CollectionSpec(
-                        id = playlistId,
-                        kind = if (isLocal) DownloadCollectionKind.LOCAL_PLAYLIST else DownloadCollectionKind.VIDEO_PLAYLIST,
-                        title = state.playlistName,
-                        author = state.ownerName,
-                        thumbnailUrl = state.thumbnailUrl.ifBlank { videos.first().thumbnailUrl },
-                    )
-                downloadQueuer.queueCollection(spec, videos, complete = isLocal || playlistRepository.cachedComplete(playlistId) != null)
+                val state = loadedState()
+                downloads.download(state, state.videos.mapTo(HashSet()) { it.id } - leftOut)
             }
+        }
+
+        /** Downloads the [picked] videos as the playlist; see [PlaylistDownloads.download]. */
+        fun downloadVideos(picked: Set<String>) {
+            viewModelScope.launch { downloads.download(loadedState(), picked) }
+        }
+
+        /**
+         * Where a queue started from the first [loadedCount] videos finds the rest, or null when it
+         * already holds the whole playlist.
+         */
+        fun queueSource(loadedCount: Int): QueuePageSource? =
+            remote.tokenAfter(loadedCount)?.let { queueSources.playlistPages(playlistId, it) }
+
+        private suspend fun loadedState(): PlaylistDetailUiState {
+            _uiState.first { !it.isLoading }
+            remote.awaitAll()
+            return _uiState.value
         }
 
         private fun loadPlaylist() {
@@ -451,27 +464,23 @@ class PlaylistDetailViewModel
         }
 
         private suspend fun loadRemotePlaylist() {
-            val page = playlistRepository.cachedComplete(playlistId) ?: playlistRepository.firstPage(playlistId)
+            // A downloaded playlist shows from the device at once, and stays that way without a network.
+            val offline = collections.offline(playlistId)?.takeIf { it.videos.isNotEmpty() }
+            if (offline != null) {
+                showOffline(offline)
+                // The live list replaces the download only once it is whole, so the list never shrinks.
+                if (NetworkState.isOnline(context)) playlistRepository.complete(playlistId)?.let(remote::start)
+                return
+            }
+            val first =
+                playlistRepository.cachedComplete(playlistId)?.let { Result.success(it) }
+                    ?: playlistRepository.firstPageResult(playlistId)
+            val page = first.getOrNull()
             if (page != null) {
-                _uiState.update {
-                    it.copy(
-                        playlistName = page.title,
-                        ownerName = page.ownerName,
-                        isCourse = page.isCourse,
-                        description = page.description,
-                        isPrivate = false,
-                        videos = page.videos,
-                        thumbnailUrl = page.thumbnailUrl,
-                        isLocalPlaylist = false,
-                        isSaved = false,
-                        isWatchLater = false,
-                        isLoading = false,
-                        isLoadingMore = page.continuation != null,
-                        hidesUnavailable = page.continuation == null && page.hidesUnavailable(),
-                        errorMessage = null,
-                    )
-                }
-                page.continuation?.let { loadRemainingPages(page, it) }
+                remote.start(page)
+                val sorted =
+                    PlaylistSortOrder.fromStorageValue(playerPreferences.playlistSortOrder(playlistId).first()) != PlaylistSortOrder.MANUAL
+                if (sorted || collections.collection(playlistId) != null) remote.loadAll()
                 return
             }
 
@@ -496,58 +505,44 @@ class PlaylistDetailViewModel
                 return
             }
 
-            collections.offline(playlistId)?.let { offline ->
-                _uiState.update {
-                    it.copy(
-                        playlistName = offline.collection.title,
-                        ownerName = offline.collection.author.takeIf(String::isNotBlank),
-                        videos = offline.videos,
-                        thumbnailUrl = offline.collection.thumbnailUrl,
-                        isLoading = false,
-                        errorMessage = null,
-                    )
-                }
-                return
-            }
-
+            val refusal = first.exceptionOrNull() as? YouTubeAlertException
             _uiState.update {
                 it.copy(
                     isLoading = false,
-                    errorMessage = context.getString(R.string.playlist_load_failed),
+                    errorMessage =
+                        when {
+                            refusal == null -> context.getString(R.string.playlist_load_failed)
+                            refusal.alert.isBlank() -> context.getString(R.string.youtube_page_unavailable)
+                            else -> refusal.alert
+                        },
+                    isGone = refusal != null,
                 )
             }
         }
 
-        /** Appends the pages after the first as they arrive, so the list is usable while it grows. */
-        private suspend fun loadRemainingPages(
-            first: RemotePlaylistPage,
-            firstToken: String,
-        ) {
-            val walk =
-                walkPlaylistPages(
-                    firstVideos = first.videos,
-                    firstToken = firstToken,
-                    maxPages = YouTubePlaylistRepository.PAGE_LIMIT,
-                    nextPage = { playlistRepository.nextPage(playlistId, it) },
-                    onPage = { videos -> _uiState.update { it.copy(videos = videos) } },
-                )
+        private fun showOffline(offline: OfflineCollection) {
             _uiState.update {
-                it.copy(isLoadingMore = false, hidesUnavailable = walk.finished && first.hidesUnavailable(walk.videos.size))
+                it.copy(
+                    playlistName = offline.collection.title,
+                    ownerName = offline.collection.author.takeIf(String::isNotBlank),
+                    videos = offline.videos,
+                    thumbnailUrl = offline.collection.thumbnailUrl,
+                    isLoading = false,
+                    errorMessage = null,
+                )
             }
-            if (walk.finished) playlistRepository.rememberComplete(playlistId, first.copy(videos = walk.videos))
         }
 
         private fun refreshSavedPlaylist() {
             viewModelScope.launch {
-                val details = playlistRepository.complete(playlistId) ?: return@launch
-                repository.syncSavedPlaylistVideos(playlistId, details.videos)
+                val header = savedRefresh.run() ?: return@launch
                 _uiState.update { state ->
                     state.copy(
-                        playlistName = details.title.ifBlank { state.playlistName },
-                        ownerName = details.ownerName ?: state.ownerName,
-                        description = details.description.ifBlank { state.description },
-                        thumbnailUrl = details.thumbnailUrl.ifBlank { state.thumbnailUrl },
-                        hidesUnavailable = details.hidesUnavailable(),
+                        playlistName = header.title.ifBlank { state.playlistName },
+                        ownerName = header.ownerName ?: state.ownerName,
+                        description = header.description.ifBlank { state.description },
+                        thumbnailUrl = header.thumbnailUrl.ifBlank { state.thumbnailUrl },
+                        hidesUnavailable = header.hidesUnavailable,
                     )
                 }
             }

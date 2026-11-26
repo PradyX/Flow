@@ -1,5 +1,6 @@
 package io.github.aedev.flow.player
 
+import io.github.aedev.flow.data.model.RelatedCollection
 import io.github.aedev.flow.data.model.Video
 import io.github.aedev.flow.data.recommendation.FeedExclusions
 
@@ -34,10 +35,57 @@ object PlayerRelatedVideosPolicy {
             .filterNot { exclusions.hidesFromRecommendations(it) }
             .distinctBy { it.id }
 
+    /**
+     * YouTube's own next pick ahead of the rest, which keep their order. Runs after every filter, so
+     * a pick the viewer hid or already watched is simply absent and the list is left as it was.
+     */
+    fun upNextFirst(
+        videos: List<Video>,
+        upNextVideoId: String?,
+    ): List<Video> {
+        val index = upNextVideoId?.let { id -> videos.indexOfFirst { it.id == id } } ?: -1
+        if (index <= 0) return videos
+        return listOf(videos[index]) + videos.subList(0, index) + videos.subList(index + 1, videos.size)
+    }
+
     /** [sanitize] against a live [source]; a null source hides nothing. */
     suspend fun sanitizeHidden(
         videoId: String,
         candidates: List<Video>,
         source: FeedExclusionsSource?,
-    ): List<Video> = sanitize(videoId, candidates, exclusions = source?.current() ?: FeedExclusions.NONE)
+        watched: WatchedSuggestionsSource? = null,
+    ): List<Video> = withoutWatched(sanitize(videoId, candidates, exclusions = source?.current() ?: FeedExclusions.NONE), watched)
+
+    /**
+     * Drops the videos in [watched], unless every candidate is in it: the same list seeds autoplay,
+     * which would otherwise stop on a topic the viewer has already watched through (#2054).
+     */
+    fun withoutWatched(
+        videos: List<Video>,
+        watched: Set<String>,
+    ): List<Video> = if (watched.isEmpty()) videos else videos.filterNot { it.id in watched }.ifEmpty { videos }
+
+    /** Shorts the viewer finished leave the related shelf, and a shelf left empty goes with them. */
+    suspend fun withoutWatchedShorts(
+        collections: List<RelatedCollection>,
+        source: WatchedSuggestionsSource?,
+    ): List<RelatedCollection> {
+        val shorts = collections.filterIsInstance<RelatedCollection.ShortsShelf>().flatMap { it.shorts }
+        if (source == null || shorts.isEmpty()) return collections
+        val watched = source.watchedAmong(shorts.map { it.copy(isShort = true) })
+        if (watched.isEmpty()) return collections
+        return collections.mapNotNull { collection ->
+            if (collection is RelatedCollection.ShortsShelf) {
+                collection.copy(shorts = collection.shorts.filterNot { it.id in watched }).takeIf { it.shorts.isNotEmpty() }
+            } else {
+                collection
+            }
+        }
+    }
+
+    /** [withoutWatched] against a live [source]; a null source hides nothing. */
+    suspend fun withoutWatched(
+        videos: List<Video>,
+        source: WatchedSuggestionsSource?,
+    ): List<Video> = if (source == null || videos.isEmpty()) videos else withoutWatched(videos, source.watchedAmong(videos))
 }

@@ -113,6 +113,15 @@ jobs:
           :app:compileGithubDebugAndroidTestKotlin
           --build-cache --stacktrace
 
+      - name: Upload unit test reports
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 7
+
   lint:
     name: Lint
     runs-on: ubuntu-24.04
@@ -159,7 +168,7 @@ jobs:
   build:
     name: Build APK
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -322,6 +331,20 @@ jobs:
           cp "$src" "dist-nightly/flow-nightly-${GITHUB_RUN_NUMBER}.apk"
           (cd dist-nightly && sha256sum flow-nightly-*.apk | tee checksums.txt)
 
+      # Unit tests run before R8; this reads the shrunk dex for Gson models and generic
+      # signatures R8 could have dropped (#996, #964).
+      - name: Check R8 output
+        shell: bash
+        run: |
+          shopt -s nullglob
+          apks=(
+            app/build/outputs/apk/foss/release/app-foss-arm64-v8a-release*.apk
+            app/build/outputs/apk/github/nightly/app-github-arm64-v8a-nightly*.apk
+            app/build/outputs/apk/github/release/app-github-arm64-v8a-release*.apk
+          )
+          test ${#apks[@]} -gt 0
+          python3 .github/scripts/release_apk_guard.py "${apks[@]}"
+
       - name: Report individual APK sizes
         shell: bash
         run: |
@@ -483,22 +506,39 @@ jobs:
         run: |
           set -euo pipefail
           apk="flow-nightly-${GITHUB_RUN_NUMBER}.apk"
+          runs="nightly-note-runs.json"
           test -f "dist-nightly/$apk"
+          mkdir -p nightly-state
+          previous_run="$GITHUB_RUN_NUMBER"
+          if gh release view nightly >/dev/null 2>&1; then
+            assets="$(gh release view nightly --json assets --jq '.assets[].name')"
+            last_apk="$(printf '%s\n' "$assets" | grep -E '^flow-nightly-[0-9]+\.apk$' | head -n 1 || true)"
+            if [ -n "$last_apk" ]; then
+              previous_run="${last_apk#flow-nightly-}"
+              previous_run="${previous_run%.apk}"
+            fi
+            if printf '%s\n' "$assets" | grep -qx "$runs"; then
+              gh release download nightly -p "$runs" -D nightly-state --clobber
+            fi
+          fi
+          # Built before the tag moves, so a failure here leaves the previous nightly intact.
+          python3 .github/scripts/nightly_notes.py \
+            --intro "Built from ${GITHUB_SHA::7} by run ${GITHUB_RUN_NUMBER}. Installs next to the stable app as Flow Nightly and updates itself from here." \
+            --run "$GITHUB_RUN_NUMBER" --previous-run "$previous_run" \
+            --runs-in "nightly-state/$runs" --runs-out "dist-nightly/$runs" \
+            > nightly-body.md
           if gh release view nightly >/dev/null 2>&1; then
             gh api -X PATCH "repos/$GH_REPO/git/refs/tags/nightly" -f sha="$GITHUB_SHA" -F force=true >/dev/null
           else
             gh release create nightly --target "$GITHUB_SHA" --prerelease --latest=false \
               --title "Flow nightly" --notes "Rolling nightly build."
           fi
-          gh release upload nightly "dist-nightly/$apk" dist-nightly/checksums.txt --clobber
+          gh release upload nightly "dist-nightly/$apk" dist-nightly/checksums.txt "dist-nightly/$runs" --clobber
           for old in $(gh release view nightly --json assets --jq '.assets[].name'); do
-            if [ "$old" != "$apk" ] && [ "$old" != "checksums.txt" ]; then
+            if [ "$old" != "$apk" ] && [ "$old" != "checksums.txt" ] && [ "$old" != "$runs" ]; then
               gh release delete-asset nightly "$old" --yes
             fi
           done
-          python3 .github/scripts/nightly_notes.py \
-            --intro "Built from ${GITHUB_SHA::7} by run ${GITHUB_RUN_NUMBER}. Installs next to the stable app as Flow Nightly and updates itself from here." \
-            > nightly-body.md
           gh release edit nightly --prerelease --latest=false \
             --title "Flow nightly ${GITHUB_RUN_NUMBER}" \
             --notes-file nightly-body.md
