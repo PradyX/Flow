@@ -1,6 +1,7 @@
 package io.github.aedev.flow.presentation.feed
 
 import io.github.aedev.flow.data.model.Video
+import io.github.aedev.flow.data.taste.UserTaste
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -87,7 +88,20 @@ class VideoHomeFeedTest {
 
     @Test
     fun `chips carry the app's keys, in its order`() {
-        assertEquals(listOf("all", "new", "recent", "live"), HomeChip.entries.map { it.key })
+        assertEquals(
+            listOf("all", "new", "recent", "live"),
+            HomeChip.forTaste(UserTaste()).map { it.key },
+        )
+    }
+
+    @Test
+    fun `chips carry the viewer's picks between All and the filters`() {
+        val taste = UserTaste(topics = listOf("Gaming", "Music", "Pop Music", "Gaming"))
+
+        assertEquals(
+            listOf("all", "interest:Gaming", "interest:Music", "new", "recent", "live"),
+            HomeChip.forTaste(taste).map { it.key },
+        )
     }
 
     private fun video(

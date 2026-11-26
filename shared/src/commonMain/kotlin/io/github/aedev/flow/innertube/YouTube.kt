@@ -1043,6 +1043,15 @@ object YouTube {
             response.toChannelPage(response.toChannelHeader(idOrHandle).mergedWith(about))
         }
 
+    /**
+     * Just the avatar a channel's landing header draws. A feed row that arrived without one asks
+     * this instead of the whole channel page, so filling a card's avatar costs one browse.
+     */
+    suspend fun channelAvatar(idOrHandle: String): String? =
+        runCatching {
+            channelBrowseJson(browseId = idOrHandle).toChannelHeader(idOrHandle).avatarUrl.takeIf(String::isNotBlank)
+        }.getOrNull()
+
     suspend fun channelTab(
         browseId: String,
         params: String,

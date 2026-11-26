@@ -264,6 +264,11 @@ internal object FlowIcons {
         }
     }
 
+    /** The filled circle with a play cut out of it, as the Continue Watching header draws. */
+    val PlayCircle: ImageVector by lazy {
+        pathIcon("PlayCircle", "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z")
+    }
+
     val Pause: ImageVector by lazy {
         icon("Pause") {
             moveTo(6f, 5f)
@@ -635,6 +640,22 @@ internal object FlowIcons {
             moveTo(10.5f, 11.8f)
             lineTo(16.2f, 14.5f)
             lineTo(10.5f, 17.2f)
+            close()
+        }
+    }
+
+    /** Points up, as the "New videos" pill's icon does. */
+    val ArrowUpward: ImageVector by lazy {
+        icon("ArrowUpward") {
+            moveTo(4f, 12f)
+            lineTo(5.41f, 13.41f)
+            lineTo(11f, 7.83f)
+            lineTo(11f, 20f)
+            lineTo(13f, 20f)
+            lineTo(13f, 7.83f)
+            lineTo(18.58f, 13.42f)
+            lineTo(20f, 12f)
+            lineTo(12f, 4f)
             close()
         }
     }

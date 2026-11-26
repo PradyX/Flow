@@ -26,7 +26,11 @@ internal fun JsonObject.toLockupItem(owner: FeedItemOwner): FeedItem? {
     // first metadata part, linked to it; that part is the byline, not an upload date.
     val collaborators = metadata?.get("image").collaboratorDialog()
     val byline = metadata.lockupByline() ?: collaborators.bylineOwner(metadata.metadataParts())
-    val itemOwner = byline?.let { owner.copy(id = it.id, name = it.name, avatarUrl = it.avatarUrl, handle = it.handle) } ?: owner
+    val avatarUrl = lockupAvatarUrl()
+    val itemOwner =
+        byline?.let {
+            owner.copy(id = it.id, name = it.name, avatarUrl = it.avatarUrl.ifBlank { avatarUrl.orEmpty() }, handle = it.handle)
+        } ?: owner.copy(avatarUrl = owner.avatarUrl.ifBlank { avatarUrl.orEmpty() })
     val parts = metadata.metadataParts().filterNot { it == byline?.name }
     val badges = lockupBadges()
     val membersOnly = metadata.membersOnlyBadge()
@@ -110,6 +114,26 @@ private fun JsonObject.lockupVideo(
         channelHandle = owner.handle ?: avatarHandle(owner.id),
     )
 }
+
+/**
+ * The channel avatar a lockup draws beside its byline. Home's modern rows carry it here, and
+ * reading it here is what lets a card draw the channel's face without a second request.
+ */
+private fun JsonObject.lockupAvatarUrl(): String? =
+    this["metadata"]
+        .objectOrNull()
+        ?.get("lockupMetadataViewModel")
+        .objectOrNull()
+        ?.get("image")
+        .objectOrNull()
+        ?.get("decoratedAvatarViewModel")
+        .objectOrNull()
+        ?.get("avatar")
+        .objectOrNull()
+        ?.get("avatarViewModel")
+        .objectOrNull()
+        ?.get("image")
+        .largestImageUrl()
 
 /**
  * Some lockups (related videos, parts of a channel's Home) put the handle only on the avatar's tap

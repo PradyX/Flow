@@ -20,14 +20,52 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
-/** The chips above Home, in the app's order. */
-enum class HomeChip(
-    val key: String,
-) {
-    All("all"),
-    NewToYou("new"),
-    RecentlyUploaded("recent"),
-    Live("live"),
+/**
+ * The chips above Home, in the app's order: All, then the viewer's own picks from setup, then the
+ * standing filters. [key] is what the selected chip is remembered by.
+ */
+sealed interface HomeChip {
+    val key: String
+
+    data object All : HomeChip {
+        override val key = "all"
+    }
+
+    /** A topic setup recorded: the reference's taste-derived chip, carrying the viewer's own label. */
+    data class Interest(
+        val topic: String,
+    ) : HomeChip {
+        override val key: String = "interest:$topic"
+    }
+
+    data object NewToYou : HomeChip {
+        override val key = "new"
+    }
+
+    data object RecentlyUploaded : HomeChip {
+        override val key = "recent"
+    }
+
+    data object Live : HomeChip {
+        override val key = "live"
+    }
+
+    companion object {
+        /** How many taste picks sit beside All before the standing filters. */
+        const val INTEREST_CHIPS = 2
+
+        fun forTaste(
+            taste: UserTaste,
+            maxInterests: Int = INTEREST_CHIPS,
+        ): List<HomeChip> =
+            listOf(All) +
+                taste.topics
+                    .distinct()
+                    .filter { it.isNotBlank() }
+                    .take(maxInterests)
+                    .map(::Interest) +
+                listOf(NewToYou, RecentlyUploaded, Live)
+    }
 }
 
 /** What a chip keeps, matching the app's chip limits. */
@@ -110,12 +148,19 @@ suspend fun loadHomeChip(
             }
         }
 
+        is HomeChip.Interest -> {
+            searchVideos(listOf(chip.topic, "${chip.topic} new")).map { videos ->
+                videos.filterNot { it.isShort }.rankForHome(mixState)
+            }
+        }
+
         HomeChip.Live -> {
             searchVideos(taste.liveQueries(), liveParams()).map { videos ->
                 videos.filter { it.isLive && !it.isUpcoming }.rankForHome(mixState)
             }
         }
     }.map { videos -> videos.distinctBy { it.id }.take(HomeChipParams.MAX_VIDEOS) }
+        .map { videos -> videos.withChannelAvatars() }
 
 /**
  * The chip's videos through the mixer. Feedback can suppress every row a chip has: rather than

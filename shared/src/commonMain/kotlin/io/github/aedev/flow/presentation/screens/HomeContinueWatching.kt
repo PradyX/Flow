@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,17 +17,21 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.aedev.flow.data.history.WatchHistoryEntry
+import io.github.aedev.flow.presentation.ui.DurationBadge
 import io.github.aedev.flow.presentation.ui.FlowIcons
 import io.github.aedev.flow.presentation.ui.MediaArtwork
+import io.github.aedev.flow.presentation.ui.durationText
 import io.github.aedev.flow.resources.Res
 import io.github.aedev.flow.resources.continue_watching_title
 import io.github.aedev.flow.resources.history_remove
@@ -61,7 +66,7 @@ internal fun HomeContinueWatching(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                imageVector = FlowIcons.Play,
+                imageVector = FlowIcons.PlayCircle,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp),
@@ -103,38 +108,62 @@ private fun ContinueWatchingCard(
     onClick: () -> Unit,
     onRemove: () -> Unit,
 ) {
+    val progress =
+        if (entry.durationMs > 0) (entry.positionMs.toFloat() / entry.durationMs).coerceIn(0f, 1f) else null
+    val remaining =
+        entry.durationMs.takeIf { it > 0 }?.let { duration ->
+            durationText(((duration - entry.positionMs) / 1000).coerceAtLeast(0).toInt())
+        }
     Column(modifier = Modifier.width(cardWidth).clickable(onClick = onClick)) {
         Box(modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
             MediaArtwork(
                 title = entry.title,
                 imageUrl = entry.thumbnailUrl,
-                shape = MaterialTheme.shapes.large,
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f),
             )
+            if (remaining != null) {
+                DurationBadge(
+                    text = remaining,
+                    modifier = Modifier.align(Alignment.BottomEnd),
+                )
+            }
+            if (progress != null) {
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth().height(3.dp).align(Alignment.BottomStart),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = Color.White.copy(alpha = 0.4f),
+                    drawStopIndicator = {},
+                )
+            }
         }
+        Spacer(modifier = Modifier.height(6.dp))
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = entry.title,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 entry.channelName?.takeIf { it.isNotBlank() }?.let { channel ->
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = channel,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
-            IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onRemove) {
                 Icon(
                     imageVector = FlowIcons.Close,
                     modifier = Modifier.size(16.dp),

@@ -11,6 +11,8 @@ data class WatchHistoryEntry(
     val channelName: String? = null,
     val thumbnailUrl: String? = null,
     val positionMs: Long = 0,
+    /** How long the video runs, so a shelf card can draw how much is left and how far in it is. */
+    val durationMs: Long = 0,
     val timeWatchedMs: Long = 0,
     val watchedAtMillis: Long = 0,
 )

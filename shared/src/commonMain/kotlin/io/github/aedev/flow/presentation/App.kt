@@ -286,23 +286,25 @@ fun App(
         }
     // One row per video, newest first: the player writes it as it plays, so History has something
     // to resume even when the process was killed mid-track.
-    val recordWatch: (String, String, String?, String?, Long) -> Unit = { videoId, title, channelName, thumbnailUrl, positionMs ->
-        if (videoId.isNotBlank()) {
-            val existing = history.entry(videoId)
-            saveHistory(
-                history.with(
-                    WatchHistoryEntry(
-                        videoId = videoId,
-                        title = title.ifBlank { existing?.title ?: videoId },
-                        channelName = channelName ?: existing?.channelName,
-                        thumbnailUrl = thumbnailUrl ?: existing?.thumbnailUrl,
-                        positionMs = positionMs,
-                        watchedAtMillis = nowMillis(),
+    val recordWatch: (String, String, String?, String?, Long, Long) -> Unit =
+        { videoId, title, channelName, thumbnailUrl, positionMs, durationMs ->
+            if (videoId.isNotBlank()) {
+                val existing = history.entry(videoId)
+                saveHistory(
+                    history.with(
+                        WatchHistoryEntry(
+                            videoId = videoId,
+                            title = title.ifBlank { existing?.title ?: videoId },
+                            channelName = channelName ?: existing?.channelName,
+                            thumbnailUrl = thumbnailUrl ?: existing?.thumbnailUrl,
+                            positionMs = positionMs,
+                            durationMs = durationMs.takeIf { it > 0 } ?: existing?.durationMs ?: 0,
+                            watchedAtMillis = nowMillis(),
+                        ),
                     ),
-                ),
-            )
+                )
+            }
         }
-    }
     // The player as the last run left it: the queue, the track it was on, the modes and the position.
     // A relaunch continues from that point instead of dropping to nothing or to a single video.
     val restoredSession =
@@ -332,7 +334,7 @@ fun App(
                     // A new track starts at zero; the checkpoint says so before the first tick.
                     savePlaybackCheckpointJson(PlaybackCheckpoint(videoId, 0).encode())
                     val track = queue.tracks[index]
-                    recordWatch(track.videoId, track.title, null, track.thumbnailUrl, 0)
+                    recordWatch(track.videoId, track.title, null, track.thumbnailUrl, 0, 0)
                     // Only a player page is re-pointed at the new track. A viewer who is on a tab
                     // sees the change in the mini player, and replacing the tab with the player
                     // page would take the tab out of the stack a relaunch restores.
@@ -354,13 +356,14 @@ fun App(
         )
     // The queue's page reports where it is; History is written from that as it plays, not only
     // when the track ends.
-    val historyWrite: (String, String, String?, Long) -> Unit = { videoId, title, thumbnailUrl, positionMs ->
-        val now = nowMillis()
-        if (now - lastHistoryWriteMs > HISTORY_WRITE_INTERVAL_MS) {
-            lastHistoryWriteMs = now
-            recordWatch(videoId, title, null, thumbnailUrl, positionMs)
+    val historyWrite: (String, String, String?, Long, Long) -> Unit =
+        { videoId, title, thumbnailUrl, positionMs, durationMs ->
+            val now = nowMillis()
+            if (now - lastHistoryWriteMs > HISTORY_WRITE_INTERVAL_MS) {
+                lastHistoryWriteMs = now
+                recordWatch(videoId, title, null, thumbnailUrl, positionMs, durationMs)
+            }
         }
-    }
     // The last guaranteed moment: the host going to the background writes the session and the
     // position as they stand, so an ordinary app switch does not lose the tail of the track.
     HostStopEffect {
@@ -374,7 +377,7 @@ fun App(
             }
             queue.current?.let { track ->
                 lastHistoryWriteMs = nowMillis()
-                recordWatch(track.videoId, track.title, null, track.thumbnailUrl, position)
+                recordWatch(track.videoId, track.title, null, track.thumbnailUrl, position, queuePlayer.durationMs())
             }
         }
     }
@@ -593,11 +596,15 @@ fun App(
                         FlowNavigationRail(selected = selectedTab(router), onSelect = onSelectTab(router))
                     }
                     Column(modifier = Modifier.weight(1f)) {
-                        TopBar(
-                            router = router,
-                            destination = destination,
-                            onOpenProfiles = { showProfiles = true },
-                        )
+                        // Home draws its own bar inside a scroll-away header, so its bar leaves
+                        // with the feed; every other page keeps the shell's fixed bar.
+                        if (destination != AppDestination.Home) {
+                            TopBar(
+                                router = router,
+                                destination = destination,
+                                onOpenProfiles = { showProfiles = true },
+                            )
+                        }
 
                         Box(modifier = Modifier.weight(1f)) {
                             when (destination) {
@@ -612,6 +619,13 @@ fun App(
                                         },
                                         onOpenVideo = { videoId, title, thumbnailUrl ->
                                             openVideo(videoId, title, thumbnailUrl)
+                                        },
+                                        topBar = {
+                                            TopBar(
+                                                router = router,
+                                                destination = AppDestination.Home,
+                                                onOpenProfiles = { showProfiles = true },
+                                            )
                                         },
                                         continueWatching =
                                             history.entries
@@ -1021,7 +1035,13 @@ fun App(
                                                 queuePositionMs = positionMs
                                                 playerQueue?.current?.let { track ->
                                                     if (track.videoId == destination.videoId) {
-                                                        historyWrite(track.videoId, track.title, track.thumbnailUrl, positionMs)
+                                                        historyWrite(
+                                                            track.videoId,
+                                                            track.title,
+                                                            track.thumbnailUrl,
+                                                            positionMs,
+                                                            queuePlayer?.durationMs() ?: 0,
+                                                        )
                                                     }
                                                 }
                                             }
@@ -1046,6 +1066,7 @@ fun App(
                                                 title,
                                                 channelName,
                                                 thumbnailUrl ?: destination.thumbnailUrl,
+                                                0,
                                                 0,
                                             )
                                         },
