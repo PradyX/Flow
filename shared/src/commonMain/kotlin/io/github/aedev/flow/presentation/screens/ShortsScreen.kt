@@ -259,9 +259,10 @@ internal fun ShortsScreen(
                 }
             },
         ) { _ ->
-            // The reel keeps its full height under the sheet, as the reference's does, so the sheet
-            // rests over it rather than pushing it up.
-            Box(modifier = Modifier.fillMaxSize()) {
+            // The reel shrinks by the sheet's height while it is open, as the reference's reel does,
+            // so the video's frame sits above the sheet instead of behind it.
+            val reelBottomInset = if (commentsFor != null) commentsSheetHeight else 0.dp
+            Box(modifier = Modifier.fillMaxSize().padding(bottom = reelBottomInset)) {
                 when (val current = state) {
                     LoadState.Loading -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -300,6 +301,10 @@ internal fun ShortsScreen(
                                 shorts = current.value.shorts,
                                 savedIds = savedIds,
                                 subscriptions = subscriptions,
+                                // The reference's reel drops its whole overlay while the comments sheet
+                                // is open: the shrunken page shows the video alone, with no channel
+                                // row, metadata or action rail behind the sheet.
+                                chromeVisible = commentsFor == null,
                                 onToggleSaved = onToggleSaved,
                                 onToggleSubscription = onToggleSubscription,
                                 onOpenComments = openComments,
@@ -400,6 +405,7 @@ private fun ShortsPager(
     shorts: List<Short>,
     savedIds: Set<String>,
     subscriptions: SubscriptionBook,
+    chromeVisible: Boolean,
     onToggleSaved: (Short) -> Unit,
     onToggleSubscription: (Short) -> Unit,
     onOpenComments: (Short) -> Unit,
@@ -418,6 +424,7 @@ private fun ShortsPager(
             short = short,
             isSaved = short.videoId in savedIds,
             isSubscribed = short.channelId?.let { subscriptions.isSubscribed(it) } == true,
+            chromeVisible = chromeVisible,
             onToggleSaved = onToggleSaved,
             onToggleSubscription = onToggleSubscription,
             onOpenComments = onOpenComments,
@@ -434,6 +441,7 @@ private fun ShortPage(
     short: Short,
     isSaved: Boolean,
     isSubscribed: Boolean,
+    chromeVisible: Boolean,
     onToggleSaved: (Short) -> Unit,
     onToggleSubscription: (Short) -> Unit,
     onOpenComments: (Short) -> Unit,
@@ -449,41 +457,43 @@ private fun ShortPage(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize().testTag(shortStillTag(short.videoId)),
         )
-        Row(
-            modifier =
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .padding(
-                        start = ShortsChromeStartPadding,
-                        end = ShortsChromeEndPadding,
-                        bottom = ShortsControlsBottomOffset,
-                    ),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            ShortsMetadataOverlay(
-                short = short,
-                isSubscribed = isSubscribed,
-                onChannelClick = { short.channelId?.let { onOpenChannel(it, short.channelName.orEmpty()) } },
-                onSubscribeToggle = { onToggleSubscription(short) },
-                onOpenDescription = { onOpenVideo(short.videoId, short.title, short.stillUrl) },
-                modifier = Modifier.weight(1f).padding(end = ShortsMetadataEndPadding),
-            )
-            ShortsActionRail(
-                isLiked = false,
-                likeLabel = short.likeCountText.orEmpty(),
-                // Liking is an account mutation the port has no session for; the count is drawn and
-                // the button is inert, the same call the player's like pair makes.
-                onLikeClick = null,
-                commentLabel = short.commentCountText.orEmpty(),
-                onCommentsClick = { onOpenComments(short) },
-                isSaved = isSaved,
-                onSaveClick = { onToggleSaved(short) },
-                onShareClick = { onShare(short) },
-                onMoreClick = { onMore(short) },
-                channelAvatarUrl = short.channelAvatarUrl,
-                channelName = short.channelName,
-            )
+        if (chromeVisible) {
+            Row(
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(
+                            start = ShortsChromeStartPadding,
+                            end = ShortsChromeEndPadding,
+                            bottom = ShortsControlsBottomOffset,
+                        ),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                ShortsMetadataOverlay(
+                    short = short,
+                    isSubscribed = isSubscribed,
+                    onChannelClick = { short.channelId?.let { onOpenChannel(it, short.channelName.orEmpty()) } },
+                    onSubscribeToggle = { onToggleSubscription(short) },
+                    onOpenDescription = { onOpenVideo(short.videoId, short.title, short.stillUrl) },
+                    modifier = Modifier.weight(1f).padding(end = ShortsMetadataEndPadding),
+                )
+                ShortsActionRail(
+                    isLiked = false,
+                    likeLabel = short.likeCountText.orEmpty(),
+                    // Liking is an account mutation the port has no session for; the count is drawn and
+                    // the button is inert, the same call the player's like pair makes.
+                    onLikeClick = null,
+                    commentLabel = short.commentCountText.orEmpty(),
+                    onCommentsClick = { onOpenComments(short) },
+                    isSaved = isSaved,
+                    onSaveClick = { onToggleSaved(short) },
+                    onShareClick = { onShare(short) },
+                    onMoreClick = { onMore(short) },
+                    channelAvatarUrl = short.channelAvatarUrl,
+                    channelName = short.channelName,
+                )
+            }
         }
     }
 }
