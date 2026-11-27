@@ -20,6 +20,8 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -67,6 +69,7 @@ import io.github.aedev.flow.presentation.ui.LocalShareAction
 import io.github.aedev.flow.presentation.ui.NoteEditorDialog
 import io.github.aedev.flow.presentation.ui.PlayerFullscreenBackHandler
 import io.github.aedev.flow.presentation.ui.PlayerFullscreenEffect
+import io.github.aedev.flow.presentation.ui.clockText
 import io.github.aedev.flow.presentation.ui.durationText
 import io.github.aedev.flow.presentation.ui.isVideoPlaybackSupported
 import io.github.aedev.flow.resources.Res
@@ -74,6 +77,8 @@ import io.github.aedev.flow.resources.action_back
 import io.github.aedev.flow.resources.action_retry
 import io.github.aedev.flow.resources.feed_failed
 import io.github.aedev.flow.resources.link_copied
+import io.github.aedev.flow.resources.mini_player_pause
+import io.github.aedev.flow.resources.mini_player_play
 import io.github.aedev.flow.resources.notes_add
 import io.github.aedev.flow.resources.notes_at
 import io.github.aedev.flow.resources.notes_cancel
@@ -410,6 +415,15 @@ internal fun PlayerScreen(
                                 .align(Alignment.TopEnd)
                                 .padding(Dimensions.ContentPaddingHorizontal),
                     )
+                    // Playing is controlled here: the surface had step, repeat and fullscreen but no
+                    // pause and no way to move inside the track, so a viewer could not stop the
+                    // picture or reach a later moment without leaving the page.
+                    if (engine != null) {
+                        PlaybackBar(
+                            player = engine,
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
+                    }
                 }
             }
 
@@ -595,6 +609,92 @@ internal fun PlayerScreen(
 }
 
 /**
+ * The player's own transport: pause and resume, where the track is, and a bar that scrubs it. The
+ * engine owns the position, so the bar reads it on a tick and only writes a seek when a drag ends,
+ * which is what keeps the thumb under the finger instead of jumping back to the engine.
+ */
+@Composable
+private fun PlaybackBar(
+    player: QueuePlayer,
+    modifier: Modifier = Modifier,
+) {
+    var positionMs by remember(player) { mutableLongStateOf(player.positionMs()) }
+    var durationMs by remember(player) { mutableLongStateOf(player.durationMs()) }
+    var playing by remember(player) { mutableStateOf(player.isPlaying()) }
+    // Set while a drag is in progress: the bar follows the thumb, not the engine.
+    var scrubMs by remember(player) { mutableStateOf<Long?>(null) }
+    LaunchedEffect(player) {
+        while (true) {
+            positionMs = player.positionMs()
+            durationMs = player.durationMs()
+            playing = player.isPlaying()
+            delay(PLAYBACK_BAR_TICK_MS)
+        }
+    }
+    val shownMs = scrubMs ?: positionMs
+    val fraction = if (durationMs > 0) (shownMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .background(PlayerScrimAffordance)
+                .padding(start = 4.dp, end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(
+            onClick = {
+                if (playing) player.pause() else player.play()
+                // The engine reports the change on the next tick; the glyph follows the press at
+                // once so the control never lags the thumb.
+                playing = !playing
+            },
+        ) {
+            Icon(
+                imageVector = if (playing) FlowIcons.Pause else FlowIcons.Play,
+                contentDescription =
+                    stringResource(
+                        if (playing) Res.string.mini_player_pause else Res.string.mini_player_play,
+                    ),
+                tint = PlayerScrimContent,
+            )
+        }
+        Text(
+            text = clockText(shownMs),
+            style = MaterialTheme.typography.labelSmall,
+            color = PlayerScrimContent,
+        )
+        Slider(
+            value = fraction,
+            onValueChange = { dragged -> scrubMs = (dragged * durationMs).toLong() },
+            onValueChangeFinished = {
+                val target = scrubMs
+                if (target != null) {
+                    player.seekTo(target)
+                    positionMs = target
+                }
+                scrubMs = null
+            },
+            enabled = durationMs > 0,
+            colors =
+                SliderDefaults.colors(
+                    thumbColor = PlayerScrimContent,
+                    activeTrackColor = PlayerScrimContent,
+                    inactiveTrackColor = PlayerScrimContentDisabled,
+                    disabledThumbColor = PlayerScrimContentDisabled,
+                    disabledActiveTrackColor = PlayerScrimContentDisabled,
+                    disabledInactiveTrackColor = PlayerScrimContentDisabled,
+                ),
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+        )
+        Text(
+            text = clockText(durationMs),
+            style = MaterialTheme.typography.labelSmall,
+            color = PlayerScrimContent,
+        )
+    }
+}
+
+/**
  * The controls resting on the video: the queue's step buttons and where it is, then fullscreen.
  * The step buttons disable at either end rather than wrapping, matching the queue, which stops
  * after its last track.
@@ -705,3 +805,6 @@ private const val PRE_RESOLVE_AHEAD = 3
 
 /** How often the engine's position is handed to the host to be written down. */
 private const val POSITION_REPORT_INTERVAL_MS = 2_000L
+
+/** Fast enough that the bar reads as live, slow enough to cost nothing while it runs. */
+private const val PLAYBACK_BAR_TICK_MS = 500L

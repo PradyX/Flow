@@ -74,7 +74,9 @@ actual fun QueuePlayerSurface(
         factory = { viewContext ->
             PlayerView(viewContext).apply {
                 this.player = engine
-                useController = true
+                // The page draws the controls itself; the platform controller would only add a
+                // second, half-drawn bar on top of them.
+                useController = false
                 setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
             }
         },
@@ -227,6 +229,11 @@ internal class AndroidQueuePlayer(
             Log.d("FlowPlayback", "select $videoId seek=${positionMs}ms")
             engine.seekTo(positionMs)
         }
+    }
+
+    override fun seekTo(positionMs: Long) {
+        Log.d("FlowPlayback", "seek to ${positionMs}ms")
+        engine.seekTo(positionMs.coerceAtLeast(0))
     }
 
     override fun resetQueue() {

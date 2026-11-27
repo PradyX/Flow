@@ -47,6 +47,12 @@ interface QueuePlayer {
     )
 
     /**
+     * Moves the engine inside the entry that is playing now. A seek never changes the track: the
+     * page's bar is the one caller, so dragging it is the position moving, not the queue stepping.
+     */
+    fun seekTo(positionMs: Long)
+
+    /**
      * Forgets the playlist the engine holds, without touching what is playing, so the next [sync]
      * installs its window even when that window begins before the engine's own tail. A jump to
      * another row of the same queue is the caller that needs this.
@@ -86,6 +92,8 @@ internal object NoQueuePlayer : QueuePlayer {
         videoId: String,
         positionMs: Long,
     ) = Unit
+
+    override fun seekTo(positionMs: Long) = Unit
 
     override fun resetQueue() = Unit
 
