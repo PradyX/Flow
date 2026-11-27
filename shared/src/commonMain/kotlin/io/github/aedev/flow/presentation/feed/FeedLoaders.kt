@@ -567,22 +567,29 @@ internal fun plannedMusicSections(
 }
 
 /**
- * The Speed dial slot: what the listener played most recently from a music shelf, newest first, in the
- * compact tiles the app heads "Speed dial". The app keeps a music-only history (PlaylistRepository's
- * `history`, filtered by `isAudioMusicCandidate`) rather than the video watch history, so this port
- * takes only the entries its music route recorded and applies the app's own song rule: a run time
- * between 30 seconds and 20 minutes, or one not yet known.
+ * The Speed dial slot in the compact tiles the app heads "Speed dial". The app pools its music
+ * history with the tracks of the response's own "Quick picks" and "Listen again" shelves, keeps the
+ * songs of that pool and ranks it on its listening brain (app/src/main/java/io/github/aedev/flow/ui/
+ * screens/music/MusicViewModel.kt:194-207, `(history + forYou + listenAgain).audioMusicOnly().take(40)`
+ * into `musicBrain.rankTracks(pool, "heavy_rotation").take(26)`; `forYouTracks` is that Quick picks
+ * shelf at MusicViewModel.kt:1267 and `listenAgain` the "Listen again" shelf at :1251-1260). This port
+ * has no listening model, so it keeps the app's pool, its song rule (`isAudioMusicCandidate` at
+ * app/src/main/java/io/github/aedev/flow/data/music/model/MusicTrackFilters.kt:4: a run time of 30
+ * seconds to 20 minutes, or one not yet known) and its history-first pool order, and takes the tiles
+ * the shelf shows.
  */
-internal fun loadSpeedDial(): MusicSection? {
-    val entries =
+internal fun loadSpeedDial(
+    shelves: List<MusicSection> = emptyList(),
+    discovery: List<FeedEntry> = emptyList(),
+): MusicSection? {
+    val played =
         WatchHistory
             .decode(loadWatchHistoryJson())
             .entries
             .filter { entry ->
                 val seconds = entry.durationMs / 1000
                 entry.music && entry.videoId.isNotBlank() && (seconds == 0L || seconds in 30..1200)
-            }.take(MUSIC_SPEED_DIAL_TRACKS)
-            .map { entry ->
+            }.map { entry ->
                 FeedEntry(
                     id = entry.videoId,
                     title = entry.title,
@@ -591,10 +598,36 @@ internal fun loadSpeedDial(): MusicSection? {
                     durationSeconds = (entry.durationMs / 1000).toInt().takeIf { it > 0 },
                     thumbnailUrl = entry.thumbnailUrl,
                 )
-            }.distinctBy { it.id }
+            }
+    val fromResponse =
+        SPEED_DIAL_SHELF_TITLES
+            .flatMap { title ->
+                shelves.filter { it.title?.equals(title, ignoreCase = true) == true }.flatMap { it.entries }
+            }.filter { entry ->
+                val seconds = entry.durationSeconds ?: 0
+                entry.videoId?.isNotBlank() == true && entry.subtitle != null && (seconds == 0 || seconds in 30..1200)
+            }
+    // A listener with no history yet still gets the shelf: the app's cold Quick picks lane is its
+    // chart songs, two of them (MusicQuickPicks.DISCOVERY_MAX_PICKS at
+    // app/src/main/java/io/github/aedev/flow/data/recommendation/music/MusicQuickPicks.kt:30, pooled
+    // into forYouTracks by MusicViewModel.kt:274-280).
+    val fromDiscovery =
+        discovery
+            .filter { entry ->
+                val seconds = entry.durationSeconds ?: 0
+                entry.videoId?.isNotBlank() == true && entry.subtitle != null && (seconds == 0 || seconds in 30..1200)
+            }.take(MUSIC_SPEED_DIAL_DISCOVERY)
+    val entries =
+        (played + fromResponse + fromDiscovery)
+            .distinctBy { it.id }
+            .take(MUSIC_SPEED_DIAL_POOL)
+            .take(MUSIC_SPEED_DIAL_TRACKS)
     if (entries.isEmpty()) return null
     return MusicSection(title = SPEED_DIAL_TITLE, entries = entries, shape = MusicSectionShape.DenseTiles)
 }
+
+/** The response shelves the app pools into Speed dial behind the listener's own history. */
+private val SPEED_DIAL_SHELF_TITLES = listOf("Quick picks", "Listen again")
 
 /** The Top Albums slot: the newest albums YouTube Music lists for this region, under the app's heading. */
 internal suspend fun loadTopAlbums(): MusicSection? {
@@ -611,6 +644,12 @@ internal suspend fun loadTopAlbums(): MusicSection? {
 
 /** How many tiles the speed dial holds, which is the number the app holds. */
 private const val MUSIC_SPEED_DIAL_TRACKS = 18
+
+/** How many chart songs the app's cold Quick picks lane holds, which is its only seed without taste. */
+private const val MUSIC_SPEED_DIAL_DISCOVERY = 2
+
+/** How many songs the app pools before ranking them, which is the pool the shelf draws from. */
+private const val MUSIC_SPEED_DIAL_POOL = 40
 
 /** How many ranked songs the charts lane shows, which is the number the app shows. */
 private const val MUSIC_CHART_TRACKS = 20
@@ -803,7 +842,18 @@ suspend fun loadMusicHome(
                 emptyList()
             }
         val topAlbums = loadTopAlbums()
-        val speedDial = loadSpeedDial()
+        // The app pools Speed dial from its history and the shelves its secondary load brings in, which
+        // arrive on the home page's next page, so that page is read here before the shelf is built.
+        val nextPageSections =
+            page.continuation
+                ?.let { token ->
+                    runCatching { YouTube.home(continuation = token).getOrThrow().toMusicSections() }.getOrDefault(emptyList())
+                }.orEmpty()
+        val speedDial =
+            loadSpeedDial(
+                shelves = sections + nextPageSections,
+                discovery = charts.firstOrNull { it.title == TRENDING_TITLE }?.entries.orEmpty(),
+            )
         MusicHomeFeed(
             chips = page.chips.orEmpty().mapNotNull { it.toMusicChip() },
             sections =
