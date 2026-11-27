@@ -85,6 +85,11 @@ internal fun MusicSectionList(
                 else -> 2
             }
         val moodWidth = gridCellWidth(contentWidth, moodColumns, Dimensions.ItemSpacing)
+        // The app sizes a track lane's column to the window less its insets and the next column's
+        // peek, capped at 360dp: on a medium window one column of four rows fills the lane.
+        val trackLaneWidth =
+            (maxWidth - Dimensions.ContentPaddingHorizontal * 2 - TrackLanePeek)
+                .coerceIn(TrackLaneMinWidth, TrackLaneMaxWidth)
 
         LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
             if (chips.isNotEmpty()) {
@@ -121,6 +126,7 @@ internal fun MusicSectionList(
                         section = section,
                         tileWidth = tileWidth,
                         moodWidth = moodWidth,
+                        trackLaneWidth = trackLaneWidth,
                         onOpenPlaylist = onOpenPlaylist,
                         onOpenVideo = onOpenVideo,
                         onOpenArtist = onOpenArtist,

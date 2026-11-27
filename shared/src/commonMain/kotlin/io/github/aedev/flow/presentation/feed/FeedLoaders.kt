@@ -371,6 +371,9 @@ enum class MusicSectionShape {
     /** Square cards, two lines under the artwork. */
     CollectionCards,
 
+    /** Compact song rows, four deep, scrolled sideways: how a browse page draws a shelf of songs. */
+    TrackLane,
+
     /** Mood and genre buttons: the shelf of destinations the page carries beside its carousels. */
     MoodButtons,
 }
@@ -413,6 +416,20 @@ private fun HomePage.Section.toMusicSection(): MusicSection? {
             items.all { it is AlbumItem } || listRows -> MusicSectionShape.CollectionCards
             else -> MusicSectionShape.DenseTiles
         }
+    return MusicSection(title = title, entries = entries, shape = shape)
+}
+
+/**
+ * A browse page's carousels as shelves, shaped the way the app shapes its browse body: a shelf made
+ * only of songs is a lane of compact rows, and every other shelf a lane of square collection cards,
+ * whose artist entries take the artist shape with a centred name.
+ */
+internal fun HomePage.toBrowseMusicSections(): List<MusicSection> = sections.mapNotNull { it.toBrowseMusicSection() }
+
+private fun HomePage.Section.toBrowseMusicSection(): MusicSection? {
+    val entries = items.map { it.toMusicEntry() }
+    if (entries.isEmpty()) return null
+    val shape = if (items.all { it is SongItem }) MusicSectionShape.TrackLane else MusicSectionShape.CollectionCards
     return MusicSection(title = title, entries = entries, shape = shape)
 }
 

@@ -75,11 +75,11 @@ suspend fun loadMoodPage(
     params: String? = null,
 ): Result<MoodPage> =
     YouTube.home(browseId = browseId, params = params).mapCatching { page ->
-        MoodPage(sections = page.toMusicSections(), continuation = page.continuation)
+        MoodPage(sections = page.toBrowseMusicSections(), continuation = page.continuation)
     }
 
 /** The next page of a mood's shelves, from the token the page was served with. */
 suspend fun loadMoodPageMore(continuation: String): Result<MoodPage> =
     YouTube.home(continuation = continuation).mapCatching { page ->
-        MoodPage(sections = page.toMusicSections(), continuation = page.continuation)
+        MoodPage(sections = page.toBrowseMusicSections(), continuation = page.continuation)
     }

@@ -9,12 +9,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -41,7 +46,15 @@ internal fun musicEntryClick(
     return null
 }
 
-/** A square music card: artwork, title, byline — the shape both music shelves and artists use. */
+/** The cookie an artist's artwork takes wherever a card carries one. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+internal fun artistCardShape(): Shape = MaterialShapes.Cookie9Sided.toShape()
+
+/**
+ * A square music card: artwork, title, byline. An artist's card is the same card with the artist's
+ * own shape and a centred name, which is how the app draws artists among collections.
+ */
 @Composable
 internal fun MusicCard(
     entry: FeedEntry,
@@ -51,7 +64,10 @@ internal fun MusicCard(
     width: Dp = MusicCardWidth,
 ) {
     val open = musicEntryClick(entry, onOpenPlaylist, onOpenVideo, onOpenArtist)
+    val centred = entry.isArtist
+    val textAlign = if (centred) TextAlign.Center else TextAlign.Start
     Column(
+        horizontalAlignment = if (centred) Alignment.CenterHorizontally else Alignment.Start,
         modifier =
             Modifier
                 .width(width)
@@ -60,14 +76,15 @@ internal fun MusicCard(
         MediaArtwork(
             title = entry.title,
             imageUrl = entry.thumbnailUrl,
-            shape = MaterialTheme.shapes.medium,
+            shape = if (centred) artistCardShape() else MaterialTheme.shapes.medium,
             modifier = Modifier.fillMaxWidth().aspectRatio(1f),
         )
         Spacer(modifier = Modifier.height(MusicCardTextSpacing))
         Text(
             text = entry.title,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyMediumEmphasized,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = textAlign,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -76,6 +93,7 @@ internal fun MusicCard(
                 text = line,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = textAlign,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
