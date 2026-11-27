@@ -13,6 +13,7 @@ import io.github.aedev.flow.innertube.models.response.WatchMetadataResponse
 import io.github.aedev.flow.innertube.models.response.WatchMetadataResponse.CompactVideo
 import io.github.aedev.flow.innertube.network.countryDisplayName
 import io.github.aedev.flow.innertube.pages.ArtistSectionKind
+import io.github.aedev.flow.innertube.pages.ChartsPage
 import io.github.aedev.flow.innertube.pages.HomePage
 import io.github.aedev.flow.innertube.pages.VideoCommentsSection
 import io.github.aedev.flow.innertube.pages.channel.ChannelFilterGroup
@@ -375,6 +376,9 @@ enum class MusicSectionShape {
 
     /** Mood and genre buttons: the shelf of destinations the page carries beside its carousels. */
     MoodButtons,
+
+    /** Ranked songs in the app's wide chart cards, a lane of them scrolled sideways. */
+    RankedLane,
 }
 
 /** One shelf of the music tab: its heading, its entries and the body they are drawn in. */
@@ -444,6 +448,7 @@ private fun HomePage.Section.toBrowseMusicSection(): MusicSection? {
 private const val MOODS_SHELF_TITLE = "Mood and Genres"
 
 /** The three shelves the app names itself, in the headings it gives them. */
+private const val TRENDING_TITLE = "Trending"
 private const val NEW_RELEASES_TITLE = "New releases"
 private const val COMMUNITY_PLAYLISTS_TITLE = "Trending community playlists"
 private const val ARTISTS_FOR_YOU_TITLE = "Artists for you"
@@ -554,46 +559,105 @@ internal fun plannedMusicSections(
     return listOfNotNull(artistsForYou) + planned
 }
 
+/** How many ranked songs the charts lane shows, which is the number the app shows. */
+private const val MUSIC_CHART_TRACKS = 20
+
 /**
- * The Charts slot: the ranked playlists and the ranked artists YouTube Music's chart page holds
- * for this region, under the headings the app gives them. The page's own song lane is a ranked
- * list the music tab has no body for, so only its cards are carried.
+ * The Charts slot. The ranked lane draws the app's own trending songs: the chart page's ranked
+ * songs when it carries any, else the music home's songs, else the app's last fallback, a music
+ * search for its first trending query.
  */
-internal suspend fun loadMusicCharts(): List<MusicSection> =
+internal suspend fun loadMusicCharts(trendingSongs: List<FeedEntry>): List<MusicSection> =
+    runCatching {
+        val page = YouTube.charts(country = YouTube.locale.gl).getOrThrow()
+        chartSections(page, trendingSongs.ifEmpty { trendingSongsFromSearch() })
+    }.getOrElse { emptyList() }
+
+private suspend fun trendingSongsFromSearch(): List<FeedEntry> =
     YouTube
-        .charts(country = YouTube.locale.gl)
-        .mapCatching { page ->
-            val items = page.sections.flatMap { it.items }
-            val playlists =
-                items
-                    .filterIsInstance<PlaylistItem>()
-                    .map { it.toMusicEntry() }
-                    .distinctBy { it.id }
-            val artists =
-                items
-                    .filterIsInstance<ArtistItem>()
-                    .map { it.toMusicEntry() }
-                    .distinctBy { it.id }
-            listOfNotNull(
-                playlists
-                    .takeIf { it.isNotEmpty() }
-                    ?.let {
-                        MusicSection(
-                            title = chartsTitle(page.countryCode),
-                            entries = it,
-                        )
-                    },
-                artists
-                    .takeIf { it.isNotEmpty() }
-                    ?.let {
-                        MusicSection(
-                            title = topChartArtistsTitle(page.countryCode),
-                            entries = it,
-                            shape = MusicSectionShape.ArtistPortraits,
-                        )
-                    },
-            )
-        }.getOrElse { emptyList() }
+        .search(TRENDING_SONG_QUERY, YouTube.SearchFilter.FILTER_SONG)
+        .getOrNull()
+        ?.items
+        .orEmpty()
+        .filterIsInstance<SongItem>()
+        .map { it.toMusicEntry() }
+        .distinctBy { it.id }
+        .take(MUSIC_CHART_TRACKS)
+
+/**
+ * One chart answer as the shelves the Charts slot draws, in the app's order: the ranked songs
+ * under its own heading, then the ranked playlists, then the ranked artists.
+ */
+internal fun chartSections(
+    page: ChartsPage,
+    trendingSongs: List<FeedEntry> = emptyList(),
+): List<MusicSection> {
+    val items = page.sections.flatMap { it.items }
+    // The app prefers the chart page's own ranked songs and falls back to the music home's songs,
+    // which is what fills this lane: the page the two clients get carries no song section.
+    val songs =
+        page.sections
+            .filter { it.chartType == ChartsPage.ChartType.SONGS }
+            .flatMap { it.items }
+            .filterIsInstance<SongItem>()
+            .map { it.toMusicEntry() }
+            .distinctBy { it.id }
+            .ifEmpty { trendingSongs }
+            .take(MUSIC_CHART_TRACKS)
+    val playlists =
+        items
+            .filterIsInstance<PlaylistItem>()
+            .map { it.toMusicEntry() }
+            .distinctBy { it.id }
+    val artists =
+        items
+            .filterIsInstance<ArtistItem>()
+            .map { it.toMusicEntry() }
+            .distinctBy { it.id }
+    return listOfNotNull(
+        songs
+            .takeIf { it.isNotEmpty() }
+            ?.let {
+                MusicSection(
+                    title = TRENDING_TITLE,
+                    entries = it,
+                    shape = MusicSectionShape.RankedLane,
+                )
+            },
+        playlists
+            .takeIf { it.isNotEmpty() }
+            ?.let {
+                MusicSection(
+                    title = chartsTitle(page.countryCode),
+                    entries = it,
+                )
+            },
+        artists
+            .takeIf { it.isNotEmpty() }
+            ?.let {
+                MusicSection(
+                    title = topChartArtistsTitle(page.countryCode),
+                    entries = it,
+                    shape = MusicSectionShape.ArtistPortraits,
+                )
+            },
+    )
+}
+
+/**
+ * The music home's songs in the order the response lays them out, which is the list the app's
+ * trending lane falls back to when the chart page itself ranks no songs.
+ */
+private fun HomePage.trendingSongs(): List<FeedEntry> =
+    sections
+        .flatMap { it.items }
+        .filterIsInstance<SongItem>()
+        .map { it.toMusicEntry() }
+        .distinctBy { it.id }
+        .take(MUSIC_CHART_TRACKS)
+
+/** The app's first trending query, the one its lane falls back to. */
+internal const val TRENDING_SONG_QUERY = "official music video 2025"
 
 /** "Charts in <region>", or the worldwide heading when the page charts no region of its own. */
 internal fun chartsTitle(countryCode: String?): String =
@@ -685,7 +749,7 @@ suspend fun loadMusicHome(
                 .distinctBy { it.id }
         val charts =
             if (MusicHomeSlot.CHARTS in musicSectionPlan(seed, maturity)) {
-                loadMusicCharts()
+                loadMusicCharts(trendingSongs = page.trendingSongs())
             } else {
                 emptyList()
             }

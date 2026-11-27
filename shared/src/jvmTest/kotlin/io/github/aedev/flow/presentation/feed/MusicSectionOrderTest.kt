@@ -1,5 +1,8 @@
 package io.github.aedev.flow.presentation.feed
 
+import io.github.aedev.flow.innertube.models.PlaylistItem
+import io.github.aedev.flow.innertube.models.SongItem
+import io.github.aedev.flow.innertube.pages.ChartsPage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -152,6 +155,58 @@ class MusicSectionOrderTest {
             )
 
         assertEquals(charts, planned.take(charts.size), "a cold plan stands the charts first")
+    }
+
+    @Test
+    fun theChartAnswerDrawsRankedSongsFirstThenItsCards() {
+        val songs =
+            (1..25).map { rank ->
+                SongItem(
+                    id = "song_$rank",
+                    title = "Song $rank",
+                    artists = emptyList(),
+                    thumbnail = "https://example.test/$rank.jpg",
+                )
+            }
+        val page =
+            ChartsPage(
+                sections =
+                    listOf(
+                        ChartsPage.ChartSection("Trending", songs, ChartsPage.ChartType.SONGS),
+                        ChartsPage.ChartSection(
+                            "Charts in United States",
+                            listOf(
+                                PlaylistItem(
+                                    id = "PLchart",
+                                    title = "Top 100 Music Videos United States",
+                                    author = null,
+                                    songCountText = null,
+                                    thumbnail = "https://example.test/pl.jpg",
+                                    playEndpoint = null,
+                                    shuffleEndpoint = null,
+                                    radioEndpoint = null,
+                                ),
+                            ),
+                            ChartsPage.ChartType.PLAYLISTS,
+                        ),
+                    ),
+                countryCode = "US",
+                continuation = null,
+            )
+
+        val sections = chartSections(page)
+
+        assertEquals(listOf("Trending", "Charts in United States"), sections.map { it.title })
+        assertEquals(MusicSectionShape.RankedLane, sections.first().shape)
+        assertEquals(20, sections.first().entries.size, "the lane stops where the app stops")
+        assertEquals(
+            "song_1",
+            sections
+                .first()
+                .entries
+                .first()
+                .id,
+        )
     }
 
     @Test
