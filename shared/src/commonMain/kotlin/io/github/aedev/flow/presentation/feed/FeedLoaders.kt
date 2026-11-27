@@ -629,6 +629,55 @@ internal fun loadSpeedDial(
 /** The response shelves the app pools into Speed dial behind the listener's own history. */
 private val SPEED_DIAL_SHELF_TITLES = listOf("Quick picks", "Listen again")
 
+/**
+ * "Artists for you" as this port can build it. The app composes the shelf from its own artist graph
+ * (app/src/main/java/io/github/aedev/flow/ui/screens/music/MusicViewModel.kt:542-548, artists ranked
+ * out of what its brain has heard), so the port's graph is the artists its own music listening has
+ * recorded: the channels behind the songs in its music-only history, newest first. Each name is then
+ * resolved through the music search's artist filter, which is the only source that hands back the
+ * artist's own portrait, so the card is a real artist and not a song's frame wearing its name.
+ */
+private suspend fun loadArtistsForYou(): MusicSection? {
+    val names =
+        WatchHistory
+            .decode(loadWatchHistoryJson())
+            .entries
+            .filter { it.music }
+            .mapNotNull { entry -> entry.channelName?.trim()?.takeIf(String::isNotBlank) }
+            .distinct()
+            .take(ARTISTS_FOR_YOU_LIMIT)
+    if (names.isEmpty()) return null
+    val entries =
+        coroutineScope {
+            names
+                .map { name ->
+                    async {
+                        YouTube
+                            .search(name, YouTube.SearchFilter.FILTER_ARTIST)
+                            .getOrNull()
+                            ?.items
+                            ?.filterIsInstance<ArtistItem>()
+                            ?.firstOrNull()
+                            ?.let { artist ->
+                                FeedEntry(
+                                    id = artist.id,
+                                    title = artist.title,
+                                    subtitle = null,
+                                    videoId = null,
+                                    thumbnailUrl = artist.thumbnail,
+                                    isArtist = true,
+                                )
+                            }
+                    }
+                }.awaitAll()
+        }.filterNotNull()
+    if (entries.isEmpty()) return null
+    return MusicSection(title = ARTISTS_FOR_YOU_TITLE, entries = entries, shape = MusicSectionShape.ArtistPortraits)
+}
+
+/** How many names the port's own graph offers, which is the width of the shelf's first row. */
+private const val ARTISTS_FOR_YOU_LIMIT = 5
+
 /** The Top Albums slot: the newest albums YouTube Music lists for this region, under the app's heading. */
 internal suspend fun loadTopAlbums(): MusicSection? {
     val entries =
@@ -826,9 +875,9 @@ suspend fun loadMusicHome(
                 filter = YouTube.SearchFilter.FILTER_COMMUNITY_PLAYLIST,
                 shape = MusicSectionShape.DenseTiles,
             )
-        // The app builds this shelf from its own artist graph rather than from the response, so only a
-        // response that carries the shelf can fill it here.
-        val artistsForYou = carried(ARTISTS_FOR_YOU_TITLE)
+        // The app builds this shelf from its own artist graph rather than from the response, so a
+        // response that omits it leaves the port's own graph to fill it.
+        val artistsForYou = carried(ARTISTS_FOR_YOU_TITLE) ?: loadArtistsForYou()
         val moods =
             loadMoodGroups()
                 .getOrNull()

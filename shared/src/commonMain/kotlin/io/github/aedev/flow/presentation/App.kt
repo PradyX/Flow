@@ -77,6 +77,7 @@ import io.github.aedev.flow.presentation.downloads.DownloadOutcome
 import io.github.aedev.flow.presentation.downloads.deleteDownloadedMedia
 import io.github.aedev.flow.presentation.downloads.downloadMedia
 import io.github.aedev.flow.presentation.feed.ChannelBook
+import io.github.aedev.flow.presentation.feed.FeedEntry
 import io.github.aedev.flow.presentation.feed.HomeFeedState
 import io.github.aedev.flow.presentation.feed.MusicFeedState
 import io.github.aedev.flow.presentation.feed.SearchFeedState
@@ -321,6 +322,12 @@ fun App(
     // came from stays underneath either way.
     var playerQueue by remember { mutableStateOf(restoredSession?.toQueue()) }
     var queuePositionMs by remember { mutableStateOf(restoredSession?.position() ?: 0L) }
+    // What the player page's related rail holds, so a queue that runs out can roll into it the way
+    // the reference's autoplay does instead of stopping on a still frame.
+    var playerRelated by remember { mutableStateOf<List<FeedEntry>>(emptyList()) }
+    // Counts the engine's end-of-queue reports. A count rather than a flag, so two ends in a row are
+    // two transitions instead of one state that never changed back.
+    var queueEndedAt by remember { mutableStateOf(0) }
     // One engine for the whole queue, held here so swapping the player page for the next track's
     // does not release and rebuild it: the tracks already handed to it keep playing.
     val queuePlayer =
@@ -347,7 +354,9 @@ fun App(
                     }
                 }
             },
-            onEnded = { queuePositionMs = 0 },
+            // The engine only reports an end once its whole playlist ran out; what follows the track
+            // is decided below, where the shell's queue and the page's related rail are both in reach.
+            onEnded = { queueEndedAt = queueEndedAt + 1 },
             onError = {},
             // Written straight to its own record, so no recomposition is caused by the ticks and a
             // kill loses only the time since this one.
@@ -357,6 +366,38 @@ fun App(
                 }
             },
         )
+    // What follows a track the queue had nothing behind. The reference rolls into the related rail;
+    // the port takes the first card the queue does not already hold, so a finished queue never
+    // repeats itself. The engine has run out of playlist, so its record is dropped before the next
+    // page syncs: otherwise that window starts at a track the engine does not hold and is read as a
+    // stray page and ignored.
+    LaunchedEffect(queueEndedAt) {
+        if (queueEndedAt == 0) return@LaunchedEffect
+        val queue = playerQueue ?: return@LaunchedEffect
+        val played = queue.current ?: return@LaunchedEffect
+        val next =
+            playerRelated
+                .firstOrNull { entry ->
+                    val id = entry.videoId
+                    id != null && id.isNotBlank() && queue.tracks.none { it.videoId == id }
+                }?.let { entry ->
+                    QueueTrack(
+                        videoId = entry.videoId.orEmpty(),
+                        title = entry.title,
+                        thumbnailUrl = entry.thumbnailUrl,
+                        music = played.music,
+                    )
+                }
+        if (next == null) {
+            // Nothing to follow. The engine left playWhenReady off, so the surface offers Play, and
+            // Play restarts the finished track from its first frame instead of doing nothing.
+            return@LaunchedEffect
+        }
+        queuePlayer.resetQueue()
+        playerQueue = queue.withLast(listOf(next)).copy(index = queue.size)
+        queuePositionMs = 0
+        router.replaceTop(AppDestination.Player(next.videoId, next.title, next.thumbnailUrl))
+    }
     // The queue's page reports where it is; History is written from that as it plays, not only
     // when the track ends.
     val historyWrite: (String, String, String?, Long, Long) -> Unit =
@@ -424,6 +465,7 @@ fun App(
                 if (queuePlayer.currentVideoId()?.let { it != track.videoId } == true) queuePlayer.resetQueue()
                 playerQueue = started
                 queuePositionMs = 0
+                playerRelated = emptyList()
                 router.push(AppDestination.Player(track.videoId, track.title, track.thumbnailUrl))
             }
         }
@@ -472,6 +514,8 @@ fun App(
             PlaybackQueue.of(listOf(QueueTrack(videoId, title, thumbnailUrl, music = music)))?.let { queue ->
                 playerQueue = queue
                 queuePositionMs = at
+                // A new video's rail is not the one that just played, so the old one cannot autoplay.
+                playerRelated = emptyList()
             }
         }
         val page = AppDestination.Player(videoId, title, thumbnailUrl)
@@ -1062,6 +1106,7 @@ fun App(
                                         onQueueStep = stepQueue,
                                         queuePlayer = queuePlayer.takeIf { isVideoPlaybackSupported },
                                         startPositionMs = queuePositionMs,
+                                        onRelated = { entries -> playerRelated = entries },
                                         onPosition = { index, positionMs ->
                                             // A page the queue has already left can still compose
                                             // once and report the track it was showing; only the

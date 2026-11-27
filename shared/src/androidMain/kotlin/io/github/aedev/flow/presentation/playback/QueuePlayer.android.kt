@@ -126,7 +126,13 @@ internal class AndroidQueuePlayer(
 
     override fun onStateChanged(state: Int) {
         Log.d("FlowPlayback", "state=$state at item=${engine.currentMediaItemIndex} pos=${engine.currentPosition}")
-        if (state == Player.STATE_ENDED) onEnded()
+        if (state == Player.STATE_ENDED) {
+            // The queue ran out. The engine still reports playWhenReady, which would draw a pause
+            // glyph over a still frame; dropping it makes the control an honest Play that restarts
+            // the last track when nothing follows it.
+            engine.playWhenReady = false
+            onEnded()
+        }
     }
 
     override fun onError(error: PlaybackException) {
@@ -257,6 +263,9 @@ internal class AndroidQueuePlayer(
     }
 
     override fun play() {
+        // A finished queue leaves the engine at its end: Play there is the track again from its
+        // first frame, not a resume of a position that has nowhere to go.
+        if (engine.playbackState == Player.STATE_ENDED) engine.seekTo(0)
         // Resuming brings the notification back, as the session's own resume does.
         engine.playWhenReady = true
         PlaybackHost.startService(context)

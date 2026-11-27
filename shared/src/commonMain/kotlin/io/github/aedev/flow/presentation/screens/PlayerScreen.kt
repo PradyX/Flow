@@ -51,6 +51,7 @@ import io.github.aedev.flow.data.subscriptions.Subscription
 import io.github.aedev.flow.innertube.pages.player.PlayableStream
 import io.github.aedev.flow.presentation.downloads.toPlayableStream
 import io.github.aedev.flow.presentation.feed.FeedComment
+import io.github.aedev.flow.presentation.feed.FeedEntry
 import io.github.aedev.flow.presentation.feed.LoadState
 import io.github.aedev.flow.presentation.feed.VideoDetail
 import io.github.aedev.flow.presentation.feed.liveChatMessages
@@ -154,6 +155,11 @@ internal fun PlayerScreen(
     /** Downloads this video's stream, or removes the download the device already holds. */
     onDownload: (title: String, channelName: String?, thumbnailUrl: String?, stream: PlayableStream?) -> Unit =
         { _, _, _, _ -> },
+    /**
+     * The related rail this page loaded, so a finished queue can roll into it instead of stopping on
+     * a still frame. An imported file has none and reports an empty list.
+     */
+    onRelated: (List<FeedEntry>) -> Unit = {},
 ) {
     // A queue belongs to the page only while it points at it: opening any other video leaves it.
     val activeQueue = queue?.takeIf { it.current?.videoId == videoId }
@@ -314,6 +320,7 @@ internal fun PlayerScreen(
         // A local file has no watch page: the page's header is the file's own name, and the sections
         // that need a response (actions, description, related, comments) stay away.
         if (localStream != null) {
+            onRelated(emptyList())
             state =
                 LoadState.Ready(
                     VideoDetail(
@@ -345,6 +352,7 @@ internal fun PlayerScreen(
                             detail.channel,
                             thumbnailUrl ?: videoPosterUrl(videoId),
                         )
+                        onRelated(detail.related)
                         LoadState.Ready(detail)
                     }
                 },
