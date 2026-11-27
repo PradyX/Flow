@@ -62,7 +62,7 @@ internal fun MusicScreen(
         if (attempt == 0 && selectedChip == null && state.feed is LoadState.Ready) return@LaunchedEffect
         state.feed = LoadState.Loading
         state.feed =
-            loadMusicHome(chip = selectedChip).fold(
+            loadMusicHome(chip = selectedChip, seed = state.sectionSeed).fold(
                 onSuccess = { LoadState.Ready(it) },
                 onFailure = { LoadState.Failed(it.message.orEmpty()) },
             )
@@ -122,7 +122,7 @@ internal fun MusicScreen(
                         if (state.loadingMore) return@MusicShelves
                         state.loadingMore = true
                         scope.launch {
-                            loadMusicHome(chip = selectedChip, continuation = token).onSuccess { next ->
+                            loadMusicHome(chip = selectedChip, continuation = token, seed = state.sectionSeed).onSuccess { next ->
                                 val shown = state.feed as? LoadState.Ready ?: return@launch
                                 state.feed = LoadState.Ready(shown.value.more(next))
                             }

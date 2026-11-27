@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
+import kotlin.random.Random
 
 /**
  * A comment the watch page shows. [likes] is YouTube's own label ("73K"), so a large count reads
@@ -441,8 +442,68 @@ private fun HomePage.Section.toBrowseMusicSection(): MusicSection? {
 /** The heading the app gives its mood and genre shelf. */
 private const val MOODS_SHELF_TITLE = "Mood and Genres"
 
-/** The headings the app opens its music page with, in this order. */
-internal val MUSIC_LEAD_SECTIONS = listOf("New releases", "Trending community playlists", "Artists for you")
+/** The three shelves the app names itself, in the headings it gives them. */
+private const val NEW_RELEASES_TITLE = "New releases"
+private const val COMMUNITY_PLAYLISTS_TITLE = "Trending community playlists"
+private const val ARTISTS_FOR_YOU_TITLE = "Artists for you"
+
+/**
+ * The slots the app's music page plans, in the order it lists them before a session moves them
+ * (`HomeSectionType` in the app, whose declaration order is this order).
+ */
+internal enum class MusicHomeSlot {
+    DAILY_DISCOVER,
+    QUICK_PICKS,
+    FROM_COMMUNITY,
+    RECOMMENDED,
+    SIMILAR_TO,
+    LIVE_PERFORMANCES,
+    MUSIC_VIDEOS_FOR_YOU,
+    MUSIC_VIDEOS,
+    GENRES,
+    DYNAMIC_HOME,
+    TOP_ALBUMS,
+    FAVORITE_ARTIST_ALBUMS,
+    NEW_RELEASES,
+    CHARTS,
+    POPULAR_ARTISTS,
+    MIXED_FOR_YOU,
+    MOODS_AND_GENRES,
+}
+
+/**
+ * How much the app's recommendation brain knows about the listener. This port keeps no listening
+ * model at all, so its brain is always at the state the app starts from, and its plan always takes
+ * the `cold_start` anchors: charts, then the mood shelf, then new releases.
+ */
+internal const val MUSIC_BRAIN_COLD_START = "cold_start"
+
+/**
+ * The app's per-session plan: three slots anchored by how much its brain knows about the listener,
+ * then every other slot in its listed order, shuffled with the session's own seed. A seed and a
+ * maturity always give the same plan, which is what lets two pages of one session agree.
+ */
+internal fun musicSectionPlan(
+    seed: Long,
+    maturity: String? = null,
+): List<MusicHomeSlot> {
+    val anchored =
+        when (maturity) {
+            "cold_start" -> {
+                listOf(MusicHomeSlot.CHARTS, MusicHomeSlot.MOODS_AND_GENRES, MusicHomeSlot.NEW_RELEASES)
+            }
+
+            "mature" -> {
+                listOf(MusicHomeSlot.QUICK_PICKS, MusicHomeSlot.SIMILAR_TO, MusicHomeSlot.FROM_COMMUNITY)
+            }
+
+            else -> {
+                listOf(MusicHomeSlot.QUICK_PICKS, MusicHomeSlot.FROM_COMMUNITY, MusicHomeSlot.DAILY_DISCOVER)
+            }
+        }
+    val pool = MusicHomeSlot.entries - anchored.toSet()
+    return anchored + pool.shuffled(Random(seed))
+}
 
 /**
  * The app's mood and genre shelf: every button its index offers, once each, in the index's order.
@@ -455,11 +516,40 @@ private fun moodsShelf(moods: List<MoodGenre>): List<MusicSection> =
         listOf(MusicSection(title = MOODS_SHELF_TITLE, shape = MusicSectionShape.MoodButtons, moods = moods))
     }
 
-/** The app's two lead shelves, moved to the front in their fixed order; the rest keep theirs. */
-internal fun musicSectionsInAppOrder(sections: List<MusicSection>): List<MusicSection> =
-    MUSIC_LEAD_SECTIONS.mapNotNull { heading ->
-        sections.firstOrNull { it.title.equals(heading, ignoreCase = true) }
-    } + sections.filterNot { section -> MUSIC_LEAD_SECTIONS.any { it.equals(section.title, ignoreCase = true) } }
+/**
+ * The page's shelves in the app's planned order. The app draws its own shelves per slot and the
+ * response's shelves together inside one slot, so the response's shelves stay in its own order and
+ * the plan decides whether they come before or after the new releases, the community playlists and
+ * the mood shelf. A slot the port has no shelves for draws nothing, and the artists shelf the app
+ * always draws ahead of the plan stays ahead of it.
+ */
+internal fun plannedMusicSections(
+    response: List<MusicSection>,
+    newReleases: MusicSection?,
+    communityPlaylists: MusicSection?,
+    artistsForYou: MusicSection?,
+    moods: List<MusicSection>,
+    seed: Long,
+    maturity: String?,
+): List<MusicSection> {
+    val dynamic =
+        response.filterNot { section ->
+            section.title.equals(NEW_RELEASES_TITLE, ignoreCase = true) ||
+                section.title.equals(COMMUNITY_PLAYLISTS_TITLE, ignoreCase = true) ||
+                section.title.equals(ARTISTS_FOR_YOU_TITLE, ignoreCase = true)
+        }
+    val planned =
+        musicSectionPlan(seed, maturity).flatMap { slot ->
+            when (slot) {
+                MusicHomeSlot.DYNAMIC_HOME -> dynamic
+                MusicHomeSlot.NEW_RELEASES -> listOfNotNull(newReleases)
+                MusicHomeSlot.FROM_COMMUNITY -> listOfNotNull(communityPlaylists)
+                MusicHomeSlot.MOODS_AND_GENRES -> moods
+                else -> emptyList()
+            }
+        }
+    return listOfNotNull(artistsForYou) + planned
+}
 
 /** A shelf the response did not carry, read from YouTube's own music search for it. */
 private suspend fun seededMusicShelf(
@@ -477,15 +567,16 @@ private suspend fun seededMusicShelf(
         ?.let { MusicSection(title = heading, entries = it, shape = shape) }
 
 /**
- * The music tab: YouTube Music's home shelves in the app's order — New releases, then Trending
- * community playlists, then the rest as the response lists them — plus the next page when the
- * response carries a token for it. A lead shelf the live page omits is asked for by name through
- * the music search, which is how the app sources those two itself; anything else is left out
- * rather than invented.
+ * The music tab: YouTube Music's home shelves in the app's planned order for this session, plus the
+ * next page when the response carries a token for it. The plan is the app's own (see
+ * [musicSectionPlan]); a shelf the app names itself and the live page omits is asked for by name
+ * through the music search, and anything else is left out rather than invented.
  */
 suspend fun loadMusicHome(
     chip: MusicChip? = null,
     continuation: String? = null,
+    seed: Long = System.currentTimeMillis(),
+    maturity: String? = MUSIC_BRAIN_COLD_START,
 ): Result<MusicHomeFeed> =
     runCatching {
         if (continuation != null) {
@@ -506,29 +597,28 @@ suspend fun loadMusicHome(
 
         val page = YouTube.home().getOrThrow()
         val sections = page.toMusicSections()
-        val missing =
-            MUSIC_LEAD_SECTIONS.filterNot { heading ->
-                sections.any { it.title.equals(heading, ignoreCase = true) }
-            }
-        val seeded =
-            missing.mapNotNull { heading ->
-                seededMusicShelf(
-                    heading = heading,
-                    query = if (heading == "Artists for you") "popular artists" else heading.lowercase(),
-                    filter =
-                        when (heading) {
-                            "New releases" -> YouTube.SearchFilter.FILTER_ALBUM
-                            "Artists for you" -> YouTube.SearchFilter.FILTER_ARTIST
-                            else -> YouTube.SearchFilter.FILTER_COMMUNITY_PLAYLIST
-                        },
-                    shape =
-                        when (heading) {
-                            "New releases" -> MusicSectionShape.CollectionCards
-                            "Artists for you" -> MusicSectionShape.ArtistPortraits
-                            else -> MusicSectionShape.DenseTiles
-                        },
-                )
-            }
+        val carried = { heading: String -> sections.firstOrNull { it.title.equals(heading, ignoreCase = true) } }
+        val newReleases =
+            carried(NEW_RELEASES_TITLE) ?: seededMusicShelf(
+                heading = NEW_RELEASES_TITLE,
+                query = NEW_RELEASES_TITLE.lowercase(),
+                filter = YouTube.SearchFilter.FILTER_ALBUM,
+                shape = MusicSectionShape.CollectionCards,
+            )
+        val communityPlaylists =
+            carried(COMMUNITY_PLAYLISTS_TITLE) ?: seededMusicShelf(
+                heading = COMMUNITY_PLAYLISTS_TITLE,
+                query = COMMUNITY_PLAYLISTS_TITLE.lowercase(),
+                filter = YouTube.SearchFilter.FILTER_COMMUNITY_PLAYLIST,
+                shape = MusicSectionShape.DenseTiles,
+            )
+        val artistsForYou =
+            carried(ARTISTS_FOR_YOU_TITLE) ?: seededMusicShelf(
+                heading = ARTISTS_FOR_YOU_TITLE,
+                query = "popular artists",
+                filter = YouTube.SearchFilter.FILTER_ARTIST,
+                shape = MusicSectionShape.ArtistPortraits,
+            )
         val moods =
             loadMoodGroups()
                 .getOrNull()
@@ -537,7 +627,16 @@ suspend fun loadMusicHome(
                 .distinctBy { it.id }
         MusicHomeFeed(
             chips = page.chips.orEmpty().mapNotNull { it.toMusicChip() },
-            sections = musicSectionsInAppOrder(sections + seeded) + moodsShelf(moods),
+            sections =
+                plannedMusicSections(
+                    response = sections,
+                    newReleases = newReleases,
+                    communityPlaylists = communityPlaylists,
+                    artistsForYou = artistsForYou,
+                    moods = moodsShelf(moods),
+                    seed = seed,
+                    maturity = maturity,
+                ),
             continuation = page.continuation,
         )
     }

@@ -19,4 +19,7 @@ internal class MusicFeedState {
 
     /** Where the page is scrolled, kept so a page opened from a shelf returns to its place. */
     val listState: LazyListState = LazyListState()
+
+    /** The session's seed, drawn once the way the app draws its own, so its plan holds for the session. */
+    val sectionSeed: Long = System.currentTimeMillis()
 }

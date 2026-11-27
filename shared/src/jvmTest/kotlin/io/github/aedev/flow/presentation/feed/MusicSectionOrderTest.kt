@@ -2,55 +2,129 @@ package io.github.aedev.flow.presentation.feed
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
- * The music page opens with the app's named shelves — New releases, Trending community playlists,
- * then Artists for you — whatever position the response put them in, and keeps every other shelf in
- * the order the response sent it.
+ * The music page's order is the app's own session plan: three slots anchored by the brain's
+ * maturity, every other slot shuffled by the session's seed, with the response's shelves kept in
+ * their own order inside the slot the app gives them.
  */
 class MusicSectionOrderTest {
-    private fun shelf(title: String) =
-        MusicSection(
-            title = title,
-            entries = emptyList(),
-        )
+    private fun shelf(title: String) = MusicSection(title = title, entries = emptyList())
 
     @Test
-    fun theLeadShelvesMoveToTheFrontInTheirFixedOrder() {
-        val ordered =
-            musicSectionsInAppOrder(
-                listOf(
-                    shelf("Quick picks"),
-                    shelf("Trending community playlists"),
-                    shelf("India's biggest hits"),
-                    shelf("New releases"),
-                    shelf("Artists for you"),
-                ),
+    fun aColdBrainLeadsWithChartsMoodsThenNewReleases() {
+        val plan = musicSectionPlan(seed = 7L, maturity = "cold_start")
+
+        assertEquals(
+            listOf(MusicHomeSlot.CHARTS, MusicHomeSlot.MOODS_AND_GENRES, MusicHomeSlot.NEW_RELEASES),
+            plan.take(3),
+        )
+        assertEquals(MusicHomeSlot.entries.size, plan.size)
+        assertEquals(MusicHomeSlot.entries.toSet(), plan.toSet())
+    }
+
+    @Test
+    fun aMatureBrainLeadsWithTaste() {
+        val plan = musicSectionPlan(seed = 7L, maturity = "mature")
+
+        assertEquals(
+            listOf(MusicHomeSlot.QUICK_PICKS, MusicHomeSlot.SIMILAR_TO, MusicHomeSlot.FROM_COMMUNITY),
+            plan.take(3),
+        )
+    }
+
+    @Test
+    fun anUnreportedBrainLeadsWithItsDefaultSlots() {
+        val plan = musicSectionPlan(seed = 7L, maturity = null)
+
+        assertEquals(
+            listOf(MusicHomeSlot.QUICK_PICKS, MusicHomeSlot.FROM_COMMUNITY, MusicHomeSlot.DAILY_DISCOVER),
+            plan.take(3),
+        )
+    }
+
+    @Test
+    fun oneSeedGivesOnePlanAndAnotherSeedMovesIt() {
+        val plan = musicSectionPlan(seed = 7L, maturity = null)
+
+        assertEquals(plan, musicSectionPlan(seed = 7L, maturity = null))
+        assertTrue(
+            (1L..20L).any { other -> musicSectionPlan(seed = other, maturity = null) != plan },
+            "a session seed has to move the plan",
+        )
+    }
+
+    @Test
+    fun theResponseKeepsItsOwnOrderInsideItsSlot() {
+        val response = listOf(shelf("Romance Right Now"), shelf("India's biggest hits"), shelf("Quick picks"))
+        val planned =
+            plannedMusicSections(
+                response = response,
+                newReleases = shelf("New releases"),
+                communityPlaylists = shelf("Trending community playlists"),
+                artistsForYou = null,
+                moods = emptyList(),
+                seed = 7L,
+                maturity = null,
             )
 
         assertEquals(
-            listOf(
-                "New releases",
-                "Trending community playlists",
-                "Artists for you",
-                "Quick picks",
-                "India's biggest hits",
-            ),
-            ordered.map { it.title },
+            listOf("Romance Right Now", "India's biggest hits", "Quick picks"),
+            planned.filter { section -> section in response }.map { it.title },
+        )
+        assertEquals(5, planned.size, "the response's shelves plus the two named ones")
+        assertEquals("New releases", planned.first { it.title == "New releases" }.title)
+    }
+
+    @Test
+    fun theNamedShelvesLeaveTheResponseBlockAndFollowThePlan() {
+        val planned =
+            plannedMusicSections(
+                response = listOf(shelf("Quick picks"), shelf("New releases"), shelf("Trending community playlists")),
+                newReleases = shelf("New releases"),
+                communityPlaylists = shelf("Trending community playlists"),
+                artistsForYou = shelf("Artists for you"),
+                moods = listOf(shelf("Mood and Genres")),
+                seed = 7L,
+                maturity = null,
+            )
+
+        assertEquals("Artists for you", planned.first().title)
+        assertEquals(
+            listOf("Mood and Genres", "New releases", "Quick picks", "Trending community playlists"),
+            planned.drop(1).map { it.title }.sorted(),
+        )
+        assertEquals(
+            1,
+            planned.count { it.title == "New releases" },
+            "a named shelf must not also stay in the response block",
         )
     }
 
     @Test
-    fun aPageWithoutTheLeadShelvesKeepsItsOwnOrder() {
-        val ordered = musicSectionsInAppOrder(listOf(shelf("Romance Right Now"), shelf("Quick picks")))
+    fun theMoodShelfSitsWhereThePlanPutsIt() {
+        val moods = listOf(shelf("Mood and Genres"))
+        val response = listOf(shelf("Quick picks"), shelf("India's biggest hits"))
+        val seed = 11L
+        val plan = musicSectionPlan(seed, maturity = null)
+        val planned =
+            plannedMusicSections(
+                response = response,
+                newReleases = null,
+                communityPlaylists = null,
+                artistsForYou = null,
+                moods = moods,
+                seed = seed,
+                maturity = null,
+            )
 
-        assertEquals(listOf("Romance Right Now", "Quick picks"), ordered.map { it.title })
-    }
-
-    @Test
-    fun aLeadShelfIsNotDuplicated() {
-        val ordered = musicSectionsInAppOrder(listOf(shelf("New releases"), shelf("New releases")))
-
-        assertEquals(listOf("New releases"), ordered.map { it.title })
+        val moodsAfterResponse =
+            plan.indexOf(MusicHomeSlot.MOODS_AND_GENRES) > plan.indexOf(MusicHomeSlot.DYNAMIC_HOME)
+        assertEquals(
+            moodsAfterResponse,
+            planned.last().title == "Mood and Genres",
+            "the mood shelf follows the plan's slot for it",
+        )
     }
 }
