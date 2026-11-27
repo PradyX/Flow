@@ -217,7 +217,7 @@ object YouTube {
                 return@runCatching homeContinuation(continuation).getOrThrow()
             }
 
-            val response = innerTube.browse(WEB_REMIX, browseId = browseId, params = params).body<BrowseResponse>()
+            val response = innerTube.browse(client, browseId = browseId, params = params).body<BrowseResponse>()
             // Every response carries the visitor the server assigned or recognised; sending it back
             // is what makes the next music home the same page rather than a fresh anonymous one.
             if (innerTube.visitorData.isNullOrBlank()) {
@@ -261,13 +261,17 @@ object YouTube {
                 innerTube.browse(WEB_REMIX, continuation = continuation).body<BrowseResponse>()
             HomePage(
                 null,
+                // A continuation page carries the same layouts the first page does: carousels with
+                // list rows (Quick picks, Trending songs for you) and album grids.
                 response.continuationContents
                     ?.sectionListContinuation
                     ?.contents
-                    ?.mapNotNull { it.musicCarouselShelfRenderer }
-                    ?.mapNotNull {
-                        HomePage.Section.fromMusicCarouselShelfRenderer(it)
-                    }.orEmpty(),
+                    .orEmpty()
+                    .mapNotNull { content ->
+                        content.musicCarouselShelfRenderer?.let {
+                            HomePage.Section.fromMusicCarouselShelfRenderer(it, chipPage = true)
+                        } ?: content.gridRenderer?.let(HomePage.Section::fromGridRenderer)
+                    },
                 response.continuationContents
                     ?.sectionListContinuation
                     ?.continuations
@@ -357,6 +361,30 @@ object YouTube {
                     ?: return@runCatching MusicVideoChart(title = "")
             val page = videoPlaylistPage(playlist.id).getOrThrow()
             MusicVideoChart(title = playlist.title, entries = page.videos.ranked())
+        }
+
+    /** The newest albums YouTube Music lists for this region, the shelf the app heads "Top Albums". */
+    suspend fun newReleaseAlbums(): Result<List<AlbumItem>> =
+        runCatching {
+            val response =
+                innerTube
+                    .browse(client = WEB_REMIX, browseId = "FEmusic_new_releases_albums")
+                    .body<BrowseResponse>()
+            response.contents
+                ?.singleColumnBrowseResultsRenderer
+                ?.tabs
+                ?.firstOrNull()
+                ?.tabRenderer
+                ?.content
+                ?.sectionListRenderer
+                ?.contents
+                ?.firstOrNull()
+                ?.gridRenderer
+                ?.items
+                .orEmpty()
+                .mapNotNull { item ->
+                    item.musicTwoRowItemRenderer?.let(HomePage.Section::fromMusicTwoRowItemRenderer)
+                }.filterIsInstance<AlbumItem>()
         }
 
     /**

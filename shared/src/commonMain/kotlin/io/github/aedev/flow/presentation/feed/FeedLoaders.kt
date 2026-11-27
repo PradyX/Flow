@@ -1,5 +1,7 @@
 package io.github.aedev.flow.presentation.feed
 
+import io.github.aedev.flow.data.history.WatchHistory
+import io.github.aedev.flow.data.history.loadWatchHistoryJson
 import io.github.aedev.flow.data.model.LiveChatMessage
 import io.github.aedev.flow.data.model.LiveChatMessageType
 import io.github.aedev.flow.data.model.LiveChatSegment
@@ -452,6 +454,8 @@ private const val TRENDING_TITLE = "Trending"
 private const val NEW_RELEASES_TITLE = "New releases"
 private const val COMMUNITY_PLAYLISTS_TITLE = "Trending community playlists"
 private const val ARTISTS_FOR_YOU_TITLE = "Artists for you"
+private const val TOP_ALBUMS_TITLE = "Top Albums"
+private const val SPEED_DIAL_TITLE = "Speed dial"
 
 /**
  * The slots the app's music page plans, in the order it lists them before a session moves them
@@ -538,6 +542,8 @@ internal fun plannedMusicSections(
     seed: Long,
     maturity: String?,
     charts: List<MusicSection> = emptyList(),
+    topAlbums: MusicSection? = null,
+    speedDial: MusicSection? = null,
 ): List<MusicSection> {
     val dynamic =
         response.filterNot { section ->
@@ -553,11 +559,53 @@ internal fun plannedMusicSections(
                 MusicHomeSlot.FROM_COMMUNITY -> listOfNotNull(communityPlaylists)
                 MusicHomeSlot.MOODS_AND_GENRES -> moods
                 MusicHomeSlot.CHARTS -> charts
+                MusicHomeSlot.TOP_ALBUMS -> listOfNotNull(topAlbums)
                 else -> emptyList()
             }
         }
-    return listOfNotNull(artistsForYou) + planned
+    return listOfNotNull(speedDial, artistsForYou) + planned
 }
+
+/**
+ * The Speed dial slot: what the listener played most recently, newest first, in the compact tiles the
+ * app heads "Speed dial". The app ranks its own history, likes and listens here; this port ranks the
+ * history it keeps, which is the only one of the three it has.
+ */
+internal fun loadSpeedDial(): MusicSection? {
+    val entries =
+        WatchHistory
+            .decode(loadWatchHistoryJson())
+            .entries
+            .take(MUSIC_SPEED_DIAL_TRACKS)
+            .map { entry ->
+                FeedEntry(
+                    id = entry.videoId,
+                    title = entry.title,
+                    subtitle = entry.channelName,
+                    videoId = entry.videoId,
+                    durationSeconds = (entry.durationMs / 1000).toInt().takeIf { it > 0 },
+                    thumbnailUrl = entry.thumbnailUrl,
+                )
+            }.distinctBy { it.id }
+    if (entries.isEmpty()) return null
+    return MusicSection(title = SPEED_DIAL_TITLE, entries = entries, shape = MusicSectionShape.DenseTiles)
+}
+
+/** The Top Albums slot: the newest albums YouTube Music lists for this region, under the app's heading. */
+internal suspend fun loadTopAlbums(): MusicSection? {
+    val entries =
+        YouTube
+            .newReleaseAlbums()
+            .getOrNull()
+            .orEmpty()
+            .map { it.toMusicEntry() }
+            .distinctBy { it.id }
+    if (entries.isEmpty()) return null
+    return MusicSection(title = TOP_ALBUMS_TITLE, entries = entries, shape = MusicSectionShape.CollectionCards)
+}
+
+/** How many tiles the speed dial holds, which is the number the app holds. */
+private const val MUSIC_SPEED_DIAL_TRACKS = 18
 
 /** How many ranked songs the charts lane shows, which is the number the app shows. */
 private const val MUSIC_CHART_TRACKS = 20
@@ -734,13 +782,9 @@ suspend fun loadMusicHome(
                 filter = YouTube.SearchFilter.FILTER_COMMUNITY_PLAYLIST,
                 shape = MusicSectionShape.DenseTiles,
             )
-        val artistsForYou =
-            carried(ARTISTS_FOR_YOU_TITLE) ?: seededMusicShelf(
-                heading = ARTISTS_FOR_YOU_TITLE,
-                query = "popular artists",
-                filter = YouTube.SearchFilter.FILTER_ARTIST,
-                shape = MusicSectionShape.ArtistPortraits,
-            )
+        // The app builds this shelf from its own artist graph rather than from the response, so only a
+        // response that carries the shelf can fill it here.
+        val artistsForYou = carried(ARTISTS_FOR_YOU_TITLE)
         val moods =
             loadMoodGroups()
                 .getOrNull()
@@ -753,6 +797,8 @@ suspend fun loadMusicHome(
             } else {
                 emptyList()
             }
+        val topAlbums = loadTopAlbums()
+        val speedDial = loadSpeedDial()
         MusicHomeFeed(
             chips = page.chips.orEmpty().mapNotNull { it.toMusicChip() },
             sections =
@@ -765,6 +811,8 @@ suspend fun loadMusicHome(
                     seed = seed,
                     maturity = maturity,
                     charts = charts,
+                    topAlbums = topAlbums,
+                    speedDial = speedDial,
                 ),
             continuation = page.continuation,
         )
