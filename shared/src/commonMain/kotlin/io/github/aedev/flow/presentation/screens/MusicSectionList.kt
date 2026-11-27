@@ -1,21 +1,26 @@
 package io.github.aedev.flow.presentation.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,10 +29,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.aedev.flow.presentation.feed.MoodGenre
 import io.github.aedev.flow.presentation.feed.MusicChip
 import io.github.aedev.flow.presentation.feed.MusicSection
+import io.github.aedev.flow.presentation.feed.MusicSectionShape
+import io.github.aedev.flow.presentation.ui.FlowIcons
 import io.github.aedev.flow.presentation.ui.gridCellWidth
+import io.github.aedev.flow.resources.Res
+import io.github.aedev.flow.resources.section_mood_and_genres
+import io.github.aedev.flow.resources.ui_navigate
 import io.github.aedev.flow.ui.theme.Dimensions
+import org.jetbrains.compose.resources.stringResource
 
 private const val DENSE_TILE_COLUMNS = 3
 private val DenseTileColumnsMinimumWidth = 360.dp
@@ -53,16 +65,28 @@ internal fun MusicSectionList(
     onOpenPlaylist: (playlistId: String, title: String, thumbnailUrl: String?) -> Unit,
     onOpenVideo: (videoId: String, title: String, thumbnailUrl: String?) -> Unit,
     onOpenArtist: (artistId: String, name: String, thumbnailUrl: String?) -> Unit,
+    onOpenMood: (MoodGenre) -> Unit = {},
+    onSeeAllMoods: () -> Unit = {},
     chips: List<MusicChip> = emptyList(),
     selectedChip: MusicChip? = null,
     onChipSelected: (MusicChip?) -> Unit = {},
+    listState: LazyListState = rememberLazyListState(),
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val contentWidth = maxWidth - Dimensions.ContentPaddingHorizontal * 2
         val columns = if (contentWidth >= DenseTileColumnsMinimumWidth) DENSE_TILE_COLUMNS else 2
         val tileWidth = gridCellWidth(contentWidth, columns, Dimensions.DenseTileGap)
+        // The app sizes the mood buttons by window class: two across a phone, three on a medium
+        // window, four on an expanded one.
+        val moodColumns =
+            when {
+                maxWidth >= 840.dp -> 4
+                maxWidth >= 600.dp -> 3
+                else -> 2
+            }
+        val moodWidth = gridCellWidth(contentWidth, moodColumns, Dimensions.ItemSpacing)
 
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
             if (chips.isNotEmpty()) {
                 item(key = "music_chips") {
                     MusicChipRow(
@@ -75,26 +99,32 @@ internal fun MusicSectionList(
 
             itemsIndexed(sections, key = { index, _ -> "music_section:$index" }) { _, section ->
                 Column {
-                    Text(
-                        text = section.title,
-                        style = MaterialTheme.typography.titleLargeEmphasized,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier =
-                            Modifier.padding(
-                                start = Dimensions.ContentPaddingHorizontal,
-                                end = Dimensions.ContentPaddingHorizontal,
-                                top = Dimensions.ContentPaddingVertical,
-                                bottom = Dimensions.ContentPaddingVertical,
-                            ),
-                    )
+                    if (section.shape == MusicSectionShape.MoodButtons) {
+                        MoodsHeader(onSeeAll = onSeeAllMoods)
+                    } else {
+                        Text(
+                            text = section.title,
+                            style = MaterialTheme.typography.titleLargeEmphasized,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier =
+                                Modifier.padding(
+                                    start = Dimensions.ContentPaddingHorizontal,
+                                    end = Dimensions.ContentPaddingHorizontal,
+                                    top = Dimensions.ContentPaddingVertical,
+                                    bottom = Dimensions.ContentPaddingVertical,
+                                ),
+                        )
+                    }
                     MusicSectionBody(
                         section = section,
                         tileWidth = tileWidth,
+                        moodWidth = moodWidth,
                         onOpenPlaylist = onOpenPlaylist,
                         onOpenVideo = onOpenVideo,
                         onOpenArtist = onOpenArtist,
+                        onOpenMood = onOpenMood,
                     )
                 }
             }
@@ -113,6 +143,40 @@ internal fun MusicSectionList(
                 }
             }
         }
+    }
+}
+
+/**
+ * The moods shelf's heading: the section title and the arrow that opens the whole index, on the
+ * row the whole header is clickable along — the app's own `MusicMoodsShelf` header.
+ */
+@Composable
+private fun MoodsHeader(onSeeAll: () -> Unit) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onSeeAll)
+                .padding(
+                    horizontal = Dimensions.ContentPaddingHorizontal,
+                    vertical = Dimensions.ContentPaddingVertical,
+                ),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(Res.string.section_mood_and_genres),
+            style = MaterialTheme.typography.titleLargeEmphasized,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        Icon(
+            imageVector = FlowIcons.ArrowForward,
+            contentDescription = stringResource(Res.string.ui_navigate),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

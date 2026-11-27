@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -18,7 +19,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
@@ -35,12 +38,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.aedev.flow.presentation.feed.FeedEntry
+import io.github.aedev.flow.presentation.feed.MoodGenre
 import io.github.aedev.flow.presentation.feed.MusicSection
 import io.github.aedev.flow.presentation.feed.MusicSectionShape
 import io.github.aedev.flow.presentation.ui.MediaArtwork
+import io.github.aedev.flow.presentation.ui.MusicMoodButton
+import io.github.aedev.flow.presentation.ui.MusicMoodTone
 import io.github.aedev.flow.ui.theme.Dimensions
 
 private const val DENSE_TILE_ROWS = 3
+
+/** How many rows of mood buttons the shelf shows before it scrolls sideways. */
+private const val MOOD_ROWS = 3
 
 /**
  * A shelf's body, in the shape its entries call for: dense tiles for mixes, portraits for artists,
@@ -50,9 +59,11 @@ private const val DENSE_TILE_ROWS = 3
 internal fun MusicSectionBody(
     section: MusicSection,
     tileWidth: Dp,
+    moodWidth: Dp,
     onOpenPlaylist: (playlistId: String, title: String, thumbnailUrl: String?) -> Unit,
     onOpenVideo: (videoId: String, title: String, thumbnailUrl: String?) -> Unit,
     onOpenArtist: (artistId: String, name: String, thumbnailUrl: String?) -> Unit,
+    onOpenMood: (MoodGenre) -> Unit,
 ) {
     when (section.shape) {
         MusicSectionShape.DenseTiles -> {
@@ -80,6 +91,43 @@ internal fun MusicSectionBody(
                 onOpenPlaylist = onOpenPlaylist,
                 onOpenVideo = onOpenVideo,
                 onOpenArtist = onOpenArtist,
+            )
+        }
+
+        MusicSectionShape.MoodButtons -> {
+            MusicMoodGrid(
+                moods = section.moods,
+                moodWidth = moodWidth,
+                onOpenMood = onOpenMood,
+            )
+        }
+    }
+}
+
+/** Three rows of mood buttons, scrolled sideways, each the shelf's own cell wide. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun MusicMoodGrid(
+    moods: List<MoodGenre>,
+    moodWidth: Dp,
+    onOpenMood: (MoodGenre) -> Unit,
+) {
+    LazyHorizontalGrid(
+        rows = GridCells.Fixed(MOOD_ROWS),
+        contentPadding = PaddingValues(horizontal = Dimensions.ContentPaddingHorizontal),
+        horizontalArrangement = Arrangement.spacedBy(Dimensions.ItemSpacing),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.ItemSpacing),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(ButtonDefaults.MediumContainerHeight * MOOD_ROWS + Dimensions.ItemSpacing * (MOOD_ROWS - 1)),
+    ) {
+        itemsIndexed(moods, key = { _, mood -> mood.id }) { index, mood ->
+            MusicMoodButton(
+                title = mood.title,
+                onClick = { onOpenMood(mood) },
+                width = moodWidth,
+                tone = MusicMoodTone.forIndex(index),
             )
         }
     }

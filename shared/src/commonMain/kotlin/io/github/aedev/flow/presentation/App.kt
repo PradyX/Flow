@@ -682,6 +682,10 @@ fun App(
                                         },
                                         onSearch = { router.openTab(AppDestination.Search) },
                                         onOpenMoods = { router.push(AppDestination.Moods) },
+                                        onOpenMood = { mood ->
+                                            router.push(AppDestination.Mood(mood.browseId, mood.params, mood.title))
+                                        },
+                                        onOpenNotifications = { router.push(AppDestination.Notifications) },
                                         onOpenSettings = { router.push(AppDestination.Settings) },
                                         onOpenProfiles = { showProfiles = true },
                                     )

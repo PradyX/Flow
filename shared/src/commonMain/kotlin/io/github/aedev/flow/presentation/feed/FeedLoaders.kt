@@ -370,13 +370,18 @@ enum class MusicSectionShape {
 
     /** Square cards, two lines under the artwork. */
     CollectionCards,
+
+    /** Mood and genre buttons: the shelf of destinations the page carries beside its carousels. */
+    MoodButtons,
 }
 
 /** One shelf of the music tab: its heading, its entries and the body they are drawn in. */
 data class MusicSection(
     val title: String,
-    val entries: List<FeedEntry>,
+    val entries: List<FeedEntry> = emptyList(),
     val shape: MusicSectionShape = MusicSectionShape.CollectionCards,
+    /** The buttons a [MusicSectionShape.MoodButtons] shelf draws, in the index's own order. */
+    val moods: List<MoodGenre> = emptyList(),
 )
 
 /** One of the music page's own filter chips; choosing it asks for the page it names. */
@@ -411,8 +416,22 @@ private fun HomePage.Section.toMusicSection(): MusicSection? {
     return MusicSection(title = title, entries = entries, shape = shape)
 }
 
+/** The heading the app gives its mood and genre shelf. */
+private const val MOODS_SHELF_TITLE = "Mood and Genres"
+
 /** The headings the app opens its music page with, in this order. */
 internal val MUSIC_LEAD_SECTIONS = listOf("New releases", "Trending community playlists", "Artists for you")
+
+/**
+ * The app's mood and genre shelf: every button its index offers, once each, in the index's order.
+ * The app draws it as one of the page's shelves and opens the full index from its heading.
+ */
+private fun moodsShelf(moods: List<MoodGenre>): List<MusicSection> =
+    if (moods.isEmpty()) {
+        emptyList()
+    } else {
+        listOf(MusicSection(title = MOODS_SHELF_TITLE, shape = MusicSectionShape.MoodButtons, moods = moods))
+    }
 
 /** The app's two lead shelves, moved to the front in their fixed order; the rest keep theirs. */
 internal fun musicSectionsInAppOrder(sections: List<MusicSection>): List<MusicSection> =
@@ -488,9 +507,15 @@ suspend fun loadMusicHome(
                         },
                 )
             }
+        val moods =
+            loadMoodGroups()
+                .getOrNull()
+                .orEmpty()
+                .flatMap { group -> group.genres }
+                .distinctBy { it.id }
         MusicHomeFeed(
             chips = page.chips.orEmpty().mapNotNull { it.toMusicChip() },
-            sections = musicSectionsInAppOrder(sections + seeded),
+            sections = musicSectionsInAppOrder(sections + seeded) + moodsShelf(moods),
             continuation = page.continuation,
         )
     }

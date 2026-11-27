@@ -2,6 +2,7 @@ package io.github.aedev.flow.presentation.screens
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.aedev.flow.presentation.feed.LoadState
+import io.github.aedev.flow.presentation.feed.MoodGenre
 import io.github.aedev.flow.presentation.feed.MusicChip
 import io.github.aedev.flow.presentation.feed.MusicFeedState
 import io.github.aedev.flow.presentation.feed.MusicHomeFeed
@@ -27,8 +29,8 @@ import io.github.aedev.flow.presentation.ui.FlowProfileAction
 import io.github.aedev.flow.presentation.ui.FlowTopBar
 import io.github.aedev.flow.resources.Res
 import io.github.aedev.flow.resources.action_search
-import io.github.aedev.flow.resources.moods_title
 import io.github.aedev.flow.resources.music_title
+import io.github.aedev.flow.resources.notifications_title
 import io.github.aedev.flow.resources.settings_title
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -46,6 +48,8 @@ internal fun MusicScreen(
     onOpenArtist: (artistId: String, name: String, thumbnailUrl: String?) -> Unit,
     onSearch: () -> Unit,
     onOpenMoods: () -> Unit,
+    onOpenMood: (MoodGenre) -> Unit,
+    onOpenNotifications: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenProfiles: () -> Unit,
 ) {
@@ -80,10 +84,10 @@ internal fun MusicScreen(
                         contentDescription = stringResource(Res.string.action_search),
                     )
                 }
-                IconButton(onClick = onOpenMoods) {
+                IconButton(onClick = onOpenNotifications) {
                     Icon(
-                        imageVector = FlowIcons.Genres,
-                        contentDescription = stringResource(Res.string.moods_title),
+                        imageVector = FlowIcons.Bell,
+                        contentDescription = stringResource(Res.string.notifications_title),
                     )
                 }
                 IconButton(onClick = onOpenSettings) {
@@ -108,6 +112,7 @@ internal fun MusicScreen(
             is LoadState.Ready -> {
                 MusicShelves(
                     feed = current.value,
+                    listState = state.listState,
                     selectedChip = selectedChip,
                     onChipSelected = { selectedChip = it },
                     loadingMore = state.loadingMore,
@@ -127,6 +132,8 @@ internal fun MusicScreen(
                     onOpenPlaylist = onOpenPlaylist,
                     onOpenVideo = onOpenVideo,
                     onOpenArtist = onOpenArtist,
+                    onOpenMood = onOpenMood,
+                    onSeeAllMoods = onOpenMoods,
                 )
             }
         }
@@ -136,6 +143,7 @@ internal fun MusicScreen(
 @Composable
 private fun MusicShelves(
     feed: MusicHomeFeed,
+    listState: LazyListState,
     selectedChip: MusicChip?,
     onChipSelected: (MusicChip?) -> Unit,
     loadingMore: Boolean,
@@ -143,9 +151,12 @@ private fun MusicShelves(
     onOpenPlaylist: (playlistId: String, title: String, thumbnailUrl: String?) -> Unit,
     onOpenVideo: (videoId: String, title: String, thumbnailUrl: String?) -> Unit,
     onOpenArtist: (artistId: String, name: String, thumbnailUrl: String?) -> Unit,
+    onOpenMood: (MoodGenre) -> Unit,
+    onSeeAllMoods: () -> Unit,
 ) {
     MusicSectionList(
         sections = feed.sections,
+        listState = listState,
         chips = feed.chips,
         selectedChip = selectedChip,
         onChipSelected = onChipSelected,
@@ -155,5 +166,7 @@ private fun MusicShelves(
         onOpenPlaylist = onOpenPlaylist,
         onOpenVideo = onOpenVideo,
         onOpenArtist = onOpenArtist,
+        onOpenMood = onOpenMood,
+        onSeeAllMoods = onSeeAllMoods,
     )
 }

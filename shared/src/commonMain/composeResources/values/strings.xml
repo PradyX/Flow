@@ -423,6 +423,9 @@
     <string name="notifications_empty_title">Peace and quiet</string>
     <string name="notifications_empty_body">You're all caught up! New updates from your subscriptions will appear here.</string>
     <string name="moods_title">Moods &amp; genres</string>
+    <string name="moods_index_title">Moods &amp; Genres</string>
+    <string name="section_mood_and_genres">Mood and Genres</string>
+    <string name="ui_navigate">Navigate</string>
     <string name="moods_failed">Moods and genres did not load.</string>
     <string name="moods_empty">No moods or genres to show.</string>
     <string name="mood_empty">Nothing to show in this collection right now.</string>
