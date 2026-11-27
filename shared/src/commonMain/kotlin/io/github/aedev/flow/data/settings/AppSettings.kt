@@ -32,6 +32,9 @@ enum class Appearance {
             }
 }
 
+/** The delays the settings page offers for the countdown, the reference's own range in seconds. */
+val AUTOPLAY_DELAYS = listOf(0, 5, 10)
+
 /**
  * The settings the app keeps for itself: what the appearance page writes and the shell reads. It is
  * a record with an encoder so an unreadable value falls back to the defaults instead of stopping
@@ -40,8 +43,23 @@ enum class Appearance {
 @Serializable
 data class AppSettings(
     val appearance: Appearance = Appearance.SYSTEM,
+    /**
+     * The reference's "Auto-play Next Video": whether a queue that runs out rolls into the related
+     * rail. On by default, as it is in the app.
+     */
+    val autoplayNext: Boolean = true,
+    /**
+     * The reference's "Autoplay delay", which starts at 0: the next video switches at once, and the
+     * countdown card only appears for a delay the viewer chose.
+     */
+    val autoplayDelaySeconds: Int = 0,
 ) {
     fun withAppearance(next: Appearance): AppSettings = copy(appearance = next)
+
+    fun withAutoplay(next: Boolean): AppSettings = copy(autoplayNext = next)
+
+    fun withAutoplayDelay(seconds: Int): AppSettings =
+        copy(autoplayDelaySeconds = seconds.coerceIn(AUTOPLAY_DELAYS.first(), AUTOPLAY_DELAYS.last()))
 
     fun encode(): String = SettingsJson.encodeToString(serializer(), this)
 

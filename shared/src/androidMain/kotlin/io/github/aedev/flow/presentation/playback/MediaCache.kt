@@ -152,6 +152,15 @@ actual fun clearPlaybackCache() {
     MediaCache.clear()
 }
 
+actual fun preloadPlaybackStream(
+    videoId: String,
+    stream: PlayableStream,
+) {
+    // The same factory the engine reads through, so the bytes land under the URLs the next page is
+    // handed and its first read is a cache hit rather than a fresh CDN handshake.
+    MediaCache.context()?.let { context -> MediaCache.prefetch(context, videoId, stream) }
+}
+
 private const val CACHE_DIR = "media_cache"
 
 /** The whole cache's ceiling on disk; the queue's next entries are what it is for. */

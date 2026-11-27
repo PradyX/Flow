@@ -60,11 +60,13 @@ import io.github.aedev.flow.presentation.feed.loadPlayableStream
 import io.github.aedev.flow.presentation.feed.loadVideoDetail
 import io.github.aedev.flow.presentation.feed.videoPosterUrl
 import io.github.aedev.flow.presentation.feed.videoWatchUrl
+import io.github.aedev.flow.presentation.playback.AutoplayCountdown
 import io.github.aedev.flow.presentation.playback.PlaybackQueue
 import io.github.aedev.flow.presentation.playback.PlayerMedia
 import io.github.aedev.flow.presentation.playback.QueuePlayer
 import io.github.aedev.flow.presentation.playback.QueuePlayerSurface
 import io.github.aedev.flow.presentation.playback.RepeatMode
+import io.github.aedev.flow.presentation.playback.preloadPlaybackStream
 import io.github.aedev.flow.presentation.ui.FlowIcons
 import io.github.aedev.flow.presentation.ui.LocalShareAction
 import io.github.aedev.flow.presentation.ui.NoteEditorDialog
@@ -92,6 +94,7 @@ import io.github.aedev.flow.resources.player_next_track
 import io.github.aedev.flow.resources.player_previous_track
 import io.github.aedev.flow.resources.player_queue_position
 import io.github.aedev.flow.resources.player_repeat
+import io.github.aedev.flow.resources.player_settings_title
 import io.github.aedev.flow.ui.theme.Dimensions
 import io.github.aedev.flow.ui.theme.PlayerScrimAffordance
 import io.github.aedev.flow.ui.theme.PlayerScrimContent
@@ -160,6 +163,21 @@ internal fun PlayerScreen(
      * a still frame. An imported file has none and reports an empty list.
      */
     onRelated: (List<FeedEntry>) -> Unit = {},
+    /** The wait a finished queue is in before it rolls into its next video; null when not waiting. */
+    countdown: AutoplayCountdown? = null,
+    onCountdownCancel: () -> Unit = {},
+    onCountdownRestart: () -> Unit = {},
+    onCountdownPlayNow: () -> Unit = {},
+    /** True when the shell will roll into the related rail, so this page warms its next video. */
+    autoplayEnabled: Boolean = true,
+    autoplayDelaySeconds: Int = 0,
+    onAutoplayChange: (Boolean) -> Unit = {},
+    onAutoplayDelayChange: (Int) -> Unit = {},
+    onLoopChange: (Boolean) -> Unit = {},
+    /** A stream the shell resolved and warmed for this page's own video, so it is not minted twice. */
+    prefetchedStream: PlayableStream? = null,
+    /** Media resolved ahead of the end, so the next page opens the URLs the bytes were cached for. */
+    onAutoplayStreamReady: (videoId: String, stream: PlayableStream) -> Unit = { _, _ -> },
 ) {
     // A queue belongs to the page only while it points at it: opening any other video leaves it.
     val activeQueue = queue?.takeIf { it.current?.videoId == videoId }
@@ -189,6 +207,7 @@ internal fun PlayerScreen(
     // Fullscreen grows the surface to the whole window and puts the Android window in immersive
     // landscape; the rest of the page leaves the list until it is turned off.
     var fullscreen by remember(videoId) { mutableStateOf(false) }
+    var settingsOpen by remember(videoId) { mutableStateOf(false) }
     // The note editor: the moment is taken when it opens, so the text lands where the viewer saw.
     var noteEditorOpen by remember(videoId) { mutableStateOf(false) }
     var noteText by remember(videoId) { mutableStateOf("") }
@@ -292,7 +311,7 @@ internal fun PlayerScreen(
     // stream: they point at bytes the cache already holds, which is what makes it play offline.
     // GVS occasionally refuses a freshly minted URL with 403, so a resolution that comes back empty
     // is tried again a couple of times before the page settles on its poster.
-    LaunchedEffect(videoId, playbackAttempt, download?.videoId, localStream) {
+    LaunchedEffect(videoId, playbackAttempt, download?.videoId, localStream, prefetchedStream) {
         // An imported file is already on this device: there is nothing to resolve, and asking
         // YouTube for a `content://` id would only mint a 404.
         if (localStream != null) {
@@ -300,12 +319,40 @@ internal fun PlayerScreen(
             return@LaunchedEffect
         }
         if (!isVideoPlaybackSupported) return@LaunchedEffect
-        val resolved = loadPlayableStream(videoId).getOrNull()
+        val resolved = prefetchedStream ?: loadPlayableStream(videoId).getOrNull()
         stream = resolved ?: download?.toPlayableStream()
         if (stream == null && playbackAttempt < PLAYBACK_RESOLUTION_ATTEMPTS) {
             delay(PLAYBACK_RETRY_DELAY_MS)
             playbackAttempt++
         }
+    }
+
+    // The reference preloads the video its queue will roll into while the current one still plays, which
+    // is what makes its end-of-video switch instant. The port does the same inside the reference's own
+    // foreground lead, and hands the resolved stream up so the next page opens the URLs the bytes were
+    // cached under instead of minting a second set.
+    val autoplayCandidateId =
+        (state as? LoadState.Ready)
+            ?.value
+            ?.related
+            ?.firstOrNull { entry ->
+                val id = entry.videoId
+                id != null && id.isNotBlank() && id != videoId
+            }?.videoId
+
+    LaunchedEffect(videoId, autoplayCandidateId, autoplayEnabled, queuePlayer) {
+        val engine = queuePlayer ?: return@LaunchedEffect
+        val candidate = autoplayCandidateId?.takeIf { autoplayEnabled } ?: return@LaunchedEffect
+        while (true) {
+            val duration = engine.durationMs()
+            val position = engine.positionMs()
+            if (duration > 0 && duration - position <= AUTOPLAY_PRELOAD_LEAD_MS) break
+            delay(POSITION_REPORT_INTERVAL_MS)
+        }
+        if (engine.currentVideoId() != videoId) return@LaunchedEffect
+        val resolved = loadPlayableStream(candidate).getOrNull() ?: return@LaunchedEffect
+        preloadPlaybackStream(candidate, resolved)
+        onAutoplayStreamReady(candidate, resolved)
     }
 
     LaunchedEffect(videoId, liveChatToken) {
@@ -415,6 +462,7 @@ internal fun PlayerScreen(
                         queue = activeQueue,
                         fullscreen = fullscreen,
                         onToggleFullscreen = { fullscreen = !fullscreen },
+                        onOpenSettings = { settingsOpen = true },
                         onStep = onQueueStep,
                         repeat = activeQueue?.repeat ?: RepeatMode.OFF,
                         onCycleRepeat = { activeQueue?.withRepeat(activeQueue.repeat.next())?.let(onQueueMode) },
@@ -426,10 +474,20 @@ internal fun PlayerScreen(
                     // Playing is controlled here: the surface had step, repeat and fullscreen but no
                     // pause and no way to move inside the track, so a viewer could not stop the
                     // picture or reach a later moment without leaving the page.
-                    if (engine != null) {
+                    if (engine != null && countdown == null) {
                         PlaybackBar(
                             player = engine,
                             modifier = Modifier.align(Alignment.BottomCenter),
+                        )
+                    }
+                    // The countdown the reference lays over a finished video, on the surface it ended
+                    // on, so the next video's name, frame and the three ways out are all in reach.
+                    if (countdown != null) {
+                        AutoplayCountdownCard(
+                            countdown = countdown,
+                            onCancel = onCountdownCancel,
+                            onRestart = onCountdownRestart,
+                            onPlayNow = onCountdownPlayNow,
                         )
                     }
                 }
@@ -560,6 +618,18 @@ internal fun PlayerScreen(
             hostState = snackbar,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
+
+        if (settingsOpen) {
+            PlayerSettingsSheet(
+                autoplay = autoplayEnabled,
+                autoplayDelaySeconds = autoplayDelaySeconds,
+                loop = activeQueue?.repeat == RepeatMode.ONE,
+                onAutoplayChange = onAutoplayChange,
+                onAutoplayDelayChange = onAutoplayDelayChange,
+                onLoopChange = onLoopChange,
+                onDismiss = { settingsOpen = false },
+            )
+        }
 
         if (noteEditorOpen) {
             NoteEditorDialog(
@@ -713,6 +783,7 @@ private fun SurfaceControls(
     fullscreen: Boolean,
     onToggleFullscreen: () -> Unit,
     onStep: (PlaybackQueue) -> Unit,
+    onOpenSettings: () -> Unit = {},
     repeat: RepeatMode = RepeatMode.OFF,
     onCycleRepeat: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -780,6 +851,14 @@ private fun SurfaceControls(
                 )
             }
         }
+        // The reference's gear sits with the surface's own controls and opens what happens at the
+        // end of the track, so the player never has to be left to change the hand-off.
+        FilledTonalIconButton(onClick = onOpenSettings) {
+            Icon(
+                imageVector = FlowIcons.Tune,
+                contentDescription = stringResource(Res.string.player_settings_title),
+            )
+        }
         FullscreenToggle(fullscreen = fullscreen, onToggle = onToggleFullscreen)
     }
 }
@@ -816,3 +895,6 @@ private const val POSITION_REPORT_INTERVAL_MS = 2_000L
 
 /** Fast enough that the bar reads as live, slow enough to cost nothing while it runs. */
 private const val PLAYBACK_BAR_TICK_MS = 500L
+
+/** The reference's foreground preload lead: what is left of a video when its next one is warmed. */
+private const val AUTOPLAY_PRELOAD_LEAD_MS = 60_000L

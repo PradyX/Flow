@@ -90,11 +90,13 @@ import io.github.aedev.flow.presentation.nav.AppRouter
 import io.github.aedev.flow.presentation.nav.navigationStateJson
 import io.github.aedev.flow.presentation.nav.restoredNavigationStack
 import io.github.aedev.flow.presentation.onboarding.OnboardingScreen
+import io.github.aedev.flow.presentation.playback.AutoplayCountdown
 import io.github.aedev.flow.presentation.playback.HostStopEffect
 import io.github.aedev.flow.presentation.playback.PlaybackCheckpoint
 import io.github.aedev.flow.presentation.playback.PlaybackQueue
 import io.github.aedev.flow.presentation.playback.PlaybackSession
 import io.github.aedev.flow.presentation.playback.QueueTrack
+import io.github.aedev.flow.presentation.playback.RepeatMode
 import io.github.aedev.flow.presentation.playback.clearPlaybackCache
 import io.github.aedev.flow.presentation.playback.rememberQueuePlayer
 import io.github.aedev.flow.presentation.playback.withCheckpoint
@@ -139,6 +141,7 @@ import io.github.aedev.flow.resources.notifications_title
 import io.github.aedev.flow.resources.settings_title
 import io.github.aedev.flow.resources.shorts_title
 import io.github.aedev.flow.ui.theme.FlowTheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Clock
@@ -328,6 +331,10 @@ fun App(
     // Counts the engine's end-of-queue reports. A count rather than a flag, so two ends in a row are
     // two transitions instead of one state that never changed back.
     var queueEndedAt by remember { mutableStateOf(0) }
+    // The wait a finished queue sits in when the viewer asked for a delay, and the next video's media
+    // resolved ahead of the end so the roll into it starts from the cache.
+    var autoplayCountdown by remember { mutableStateOf<AutoplayCountdown?>(null) }
+    var prefetchedAutoplay by remember { mutableStateOf<Pair<String, PlayableStream>?>(null) }
     // One engine for the whole queue, held here so swapping the player page for the next track's
     // does not release and rebuild it: the tracks already handed to it keep playing.
     val queuePlayer =
@@ -366,6 +373,18 @@ fun App(
                 }
             },
         )
+    // The roll itself, written once for the immediate switch and for the countdown's last second.
+    // The engine has run out of playlist, so its record is dropped before the next page syncs:
+    // otherwise that window starts at a track the engine does not hold and is read as a stray page
+    // and ignored. The media warmed for this video is kept only when it is the video that follows.
+    val advanceToAutoplay: (PlaybackQueue, QueueTrack) -> Unit = { queue, next ->
+        queuePlayer.resetQueue()
+        playerQueue = queue.withLast(listOf(next)).copy(index = queue.size)
+        queuePositionMs = 0
+        autoplayCountdown = null
+        prefetchedAutoplay = prefetchedAutoplay?.takeIf { it.first == next.videoId }
+        router.replaceTop(AppDestination.Player(next.videoId, next.title, next.thumbnailUrl))
+    }
     // What follows a track the queue had nothing behind. The reference rolls into the related rail;
     // the port takes the first card the queue does not already hold, so a finished queue never
     // repeats itself. The engine has run out of playlist, so its record is dropped before the next
@@ -388,15 +407,38 @@ fun App(
                         music = played.music,
                     )
                 }
-        if (next == null) {
-            // Nothing to follow. The engine left playWhenReady off, so the surface offers Play, and
-            // Play restarts the finished track from its first frame instead of doing nothing.
+        if (next == null || !settings.autoplayNext) {
+            // Nothing to follow, or the viewer turned autoplay off. The engine left playWhenReady
+            // off, so the surface offers Play, and Play restarts the finished track from its first
+            // frame instead of doing nothing.
             return@LaunchedEffect
         }
-        queuePlayer.resetQueue()
-        playerQueue = queue.withLast(listOf(next)).copy(index = queue.size)
-        queuePositionMs = 0
-        router.replaceTop(AppDestination.Player(next.videoId, next.title, next.thumbnailUrl))
+        // The reference starts at 0 seconds, which switches at once and never draws the card; a
+        // delay the viewer chose is what puts the countdown on the surface.
+        val delaySeconds = settings.autoplayDelaySeconds
+        if (delaySeconds <= 0) {
+            advanceToAutoplay(queue, next)
+        } else {
+            autoplayCountdown =
+                AutoplayCountdown(
+                    track = next,
+                    channel = playerRelated.firstOrNull { it.videoId == next.videoId }?.subtitle?.substringBefore(" · "),
+                    secondsRemaining = delaySeconds,
+                    totalSeconds = delaySeconds,
+                )
+        }
+    }
+    // Each second of the delay is one state the card draws; the last one is the switch itself, which
+    // is the same roll the no-delay setting performs.
+    LaunchedEffect(autoplayCountdown?.track?.videoId, autoplayCountdown?.secondsRemaining) {
+        val countdown = autoplayCountdown ?: return@LaunchedEffect
+        if (countdown.secondsRemaining <= 0) {
+            autoplayCountdown = null
+            playerQueue?.let { queue -> advanceToAutoplay(queue, countdown.track) }
+        } else {
+            delay(1_000)
+            autoplayCountdown = countdown.copy(secondsRemaining = countdown.secondsRemaining - 1)
+        }
     }
     // The queue's page reports where it is; History is written from that as it plays, not only
     // when the track ends.
@@ -466,6 +508,7 @@ fun App(
                 playerQueue = started
                 queuePositionMs = 0
                 playerRelated = emptyList()
+                autoplayCountdown = null
                 router.push(AppDestination.Player(track.videoId, track.title, track.thumbnailUrl))
             }
         }
@@ -495,6 +538,7 @@ fun App(
         if (track != null) {
             if (stepped.index != playerQueue?.index) queuePositionMs = 0
             playerQueue = stepped
+            autoplayCountdown = null
             // A step is the one caller that moves the engine deliberately; an auto advance is the
             // engine moving the app.
             queuePlayer.select(track.videoId)
@@ -516,6 +560,8 @@ fun App(
                 queuePositionMs = at
                 // A new video's rail is not the one that just played, so the old one cannot autoplay.
                 playerRelated = emptyList()
+                autoplayCountdown = null
+                prefetchedAutoplay = null
             }
         }
         val page = AppDestination.Player(videoId, title, thumbnailUrl)
@@ -1011,6 +1057,16 @@ fun App(
                                             settings = updated
                                             saveAppSettingsJson(updated.encode())
                                         },
+                                        onAutoplayChange = { enabled ->
+                                            val updated = settings.withAutoplay(enabled)
+                                            settings = updated
+                                            saveAppSettingsJson(updated.encode())
+                                        },
+                                        onAutoplayDelayChange = { seconds ->
+                                            val updated = settings.withAutoplayDelay(seconds)
+                                            settings = updated
+                                            saveAppSettingsJson(updated.encode())
+                                        },
                                         onClearHistory = { saveHistory(history.cleared()) },
                                         onClearCache = { clearPlaybackCache() },
                                         onBack = { router.pop() },
@@ -1107,6 +1163,45 @@ fun App(
                                         queuePlayer = queuePlayer.takeIf { isVideoPlaybackSupported },
                                         startPositionMs = queuePositionMs,
                                         onRelated = { entries -> playerRelated = entries },
+                                        countdown = autoplayCountdown,
+                                        onCountdownCancel = { autoplayCountdown = null },
+                                        onCountdownRestart = {
+                                            autoplayCountdown = null
+                                            // A finished engine leaves Play as the restart, which seeks
+                                            // to the first frame before it plays.
+                                            queuePlayer.play()
+                                        },
+                                        onCountdownPlayNow = {
+                                            autoplayCountdown?.let { countdown ->
+                                                autoplayCountdown = null
+                                                playerQueue?.let { queue -> advanceToAutoplay(queue, countdown.track) }
+                                            }
+                                        },
+                                        autoplayEnabled = settings.autoplayNext,
+                                        autoplayDelaySeconds = settings.autoplayDelaySeconds,
+                                        onAutoplayChange = { enabled ->
+                                            val updated = settings.withAutoplay(enabled)
+                                            settings = updated
+                                            saveAppSettingsJson(updated.encode())
+                                            if (!enabled) autoplayCountdown = null
+                                        },
+                                        onAutoplayDelayChange = { seconds ->
+                                            val updated = settings.withAutoplayDelay(seconds)
+                                            settings = updated
+                                            saveAppSettingsJson(updated.encode())
+                                        },
+                                        onLoopChange = { loop ->
+                                            playerQueue?.let { queue ->
+                                                playerQueue = queue.withRepeat(if (loop) RepeatMode.ONE else RepeatMode.OFF)
+                                            }
+                                        },
+                                        prefetchedStream =
+                                            prefetchedAutoplay
+                                                ?.takeIf { it.first == destination.videoId }
+                                                ?.second,
+                                        onAutoplayStreamReady = { videoId, resolved ->
+                                            prefetchedAutoplay = videoId to resolved
+                                        },
                                         onPosition = { index, positionMs ->
                                             // A page the queue has already left can still compose
                                             // once and report the track it was showing; only the

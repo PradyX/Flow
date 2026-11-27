@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -17,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -25,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.github.aedev.flow.data.settings.AUTOPLAY_DELAYS
 import io.github.aedev.flow.data.settings.AppSettings
 import io.github.aedev.flow.data.settings.Appearance
 import io.github.aedev.flow.presentation.ui.FlowIcons
@@ -38,6 +41,11 @@ import io.github.aedev.flow.resources.appearance_material_you
 import io.github.aedev.flow.resources.appearance_system
 import io.github.aedev.flow.resources.settings_about
 import io.github.aedev.flow.resources.settings_appearance
+import io.github.aedev.flow.resources.settings_autoplay_delay
+import io.github.aedev.flow.resources.settings_autoplay_delay_off
+import io.github.aedev.flow.resources.settings_autoplay_delay_seconds
+import io.github.aedev.flow.resources.settings_autoplay_next
+import io.github.aedev.flow.resources.settings_autoplay_next_desc
 import io.github.aedev.flow.resources.settings_clear_cache
 import io.github.aedev.flow.resources.settings_clear_cache_desc
 import io.github.aedev.flow.resources.settings_clear_cache_done
@@ -45,6 +53,7 @@ import io.github.aedev.flow.resources.settings_clear_history
 import io.github.aedev.flow.resources.settings_clear_history_desc
 import io.github.aedev.flow.resources.settings_clear_history_done
 import io.github.aedev.flow.resources.settings_data
+import io.github.aedev.flow.resources.settings_playback
 import io.github.aedev.flow.resources.settings_title
 import io.github.aedev.flow.resources.settings_version
 import io.github.aedev.flow.ui.theme.Dimensions
@@ -62,6 +71,8 @@ internal fun SettingsScreen(
     settings: AppSettings,
     version: String,
     onAppearanceChange: (Appearance) -> Unit,
+    onAutoplayChange: (Boolean) -> Unit,
+    onAutoplayDelayChange: (Int) -> Unit,
     onClearHistory: () -> Unit,
     onClearCache: () -> Unit,
     onBack: () -> Unit,
@@ -122,6 +133,41 @@ internal fun SettingsScreen(
                 selected = settings.appearance == Appearance.MATERIAL_YOU,
                 onSelect = { onAppearanceChange(Appearance.MATERIAL_YOU) },
             )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            SettingsSectionHeader(stringResource(Res.string.settings_playback))
+            ListItem(
+                headlineContent = { Text(stringResource(Res.string.settings_autoplay_next)) },
+                supportingContent = { Text(stringResource(Res.string.settings_autoplay_next_desc)) },
+                trailingContent = { Switch(checked = settings.autoplayNext, onCheckedChange = null) },
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .toggleable(value = settings.autoplayNext, role = Role.Switch, onValueChange = onAutoplayChange),
+            )
+            Text(
+                text = stringResource(Res.string.settings_autoplay_delay),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier =
+                    Modifier.padding(
+                        start = Dimensions.ContentPaddingHorizontal,
+                        top = Dimensions.SectionSpacing,
+                        bottom = 4.dp,
+                    ),
+            )
+            AUTOPLAY_DELAYS.forEach { seconds ->
+                AppearanceRow(
+                    label =
+                        if (seconds == 0) {
+                            stringResource(Res.string.settings_autoplay_delay_off)
+                        } else {
+                            stringResource(Res.string.settings_autoplay_delay_seconds, seconds)
+                        },
+                    selected = settings.autoplayDelaySeconds == seconds,
+                    onSelect = { onAutoplayDelayChange(seconds) },
+                )
+            }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             SettingsSectionHeader(stringResource(Res.string.settings_data))
