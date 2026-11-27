@@ -108,6 +108,7 @@ import io.github.aedev.flow.presentation.screens.MoodScreen
 import io.github.aedev.flow.presentation.screens.MoodsScreen
 import io.github.aedev.flow.presentation.screens.MusicScreen
 import io.github.aedev.flow.presentation.screens.NotesScreen
+import io.github.aedev.flow.presentation.screens.NotificationsScreen
 import io.github.aedev.flow.presentation.screens.PlayerScreen
 import io.github.aedev.flow.presentation.screens.PlaylistScreen
 import io.github.aedev.flow.presentation.screens.PlaylistsScreen
@@ -133,6 +134,7 @@ import io.github.aedev.flow.presentation.ui.isVideoPlaybackSupported
 import io.github.aedev.flow.resources.Res
 import io.github.aedev.flow.resources.action_search
 import io.github.aedev.flow.resources.app_name_uppercase
+import io.github.aedev.flow.resources.notifications_title
 import io.github.aedev.flow.resources.settings_title
 import io.github.aedev.flow.resources.shorts_title
 import io.github.aedev.flow.ui.theme.FlowTheme
@@ -652,6 +654,7 @@ fun App(
                                             router.push(AppDestination.Channel(channelId, name))
                                         },
                                         onOpenProfiles = { showProfiles = true },
+                                        onOpenNotifications = { router.push(AppDestination.Notifications) },
                                         onUnsubscribe = { channel ->
                                             val next = subscriptions.without(channel.id)
                                             saveSubscriptions(next)
@@ -866,6 +869,13 @@ fun App(
                                         },
                                         onRemove = { videoId -> saveHistory(history.without(videoId)) },
                                         onClear = { saveHistory(history.cleared()) },
+                                        onBack = { router.pop() },
+                                    )
+                                }
+
+                                AppDestination.Notifications -> {
+                                    NotificationsScreen(
+                                        onOpenSettings = { router.push(AppDestination.Settings) },
                                         onBack = { router.pop() },
                                     )
                                 }
@@ -1235,6 +1245,12 @@ private fun TopBar(
                             contentDescription = stringResource(Res.string.action_search),
                         )
                     }
+                    IconButton(onClick = { router.push(AppDestination.Notifications) }) {
+                        Icon(
+                            imageVector = FlowIcons.Bell,
+                            contentDescription = stringResource(Res.string.notifications_title),
+                        )
+                    }
                     IconButton(onClick = { router.push(AppDestination.Settings) }) {
                         Icon(
                             imageVector = FlowIcons.SettingsOutlined,
@@ -1258,6 +1274,7 @@ private fun TopBar(
         AppDestination.History,
         AppDestination.SavedShorts,
         AppDestination.Notes,
+        AppDestination.Notifications,
         AppDestination.Playlists,
         AppDestination.Settings,
         is AppDestination.Player,

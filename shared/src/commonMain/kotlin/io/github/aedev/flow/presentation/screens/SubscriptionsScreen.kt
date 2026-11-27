@@ -68,6 +68,7 @@ import io.github.aedev.flow.resources.channels_count
 import io.github.aedev.flow.resources.feed_failed
 import io.github.aedev.flow.resources.library_filter_all
 import io.github.aedev.flow.resources.no_subscriptions_found
+import io.github.aedev.flow.resources.notifications_title
 import io.github.aedev.flow.resources.search_subscriptions
 import io.github.aedev.flow.resources.subscriptions_empty_body
 import io.github.aedev.flow.resources.subscriptions_empty_title
@@ -108,6 +109,7 @@ internal fun SubscriptionsScreen(
     onOpenVideo: (videoId: String, title: String, thumbnailUrl: String?) -> Unit,
     onOpenChannel: (channelId: String, name: String) -> Unit,
     onOpenProfiles: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
     onUnsubscribe: (Subscription) -> Unit = {},
     onRestoreSubscription: (Subscription, index: Int) -> Unit = { _, _ -> },
 ) {
@@ -174,9 +176,12 @@ internal fun SubscriptionsScreen(
                         contentDescription = stringResource(Res.string.search_subscriptions),
                     )
                 }
-                // The app's third disc opens its notifications page. The port has no notifications
-                // feed, so that disc's slot stays empty and the discs either side keep its frames.
-                Spacer(modifier = Modifier.width(Dimensions.BarActionSlot))
+                IconButton(onClick = onOpenNotifications) {
+                    Icon(
+                        imageVector = FlowIcons.Bell,
+                        contentDescription = stringResource(Res.string.notifications_title),
+                    )
+                }
                 FlowProfileAction(onClick = onOpenProfiles)
             },
         )

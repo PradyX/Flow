@@ -62,6 +62,9 @@ sealed interface AppDestination {
     /** The notes written on videos, opened from the profile sheet and the player's action row. */
     data object Notes : AppDestination
 
+    /** The inbox the bar's bell opens, a pushed page over the tab that opened it. */
+    data object Notifications : AppDestination
+
     /** The playlists this device made, opened from the Library's bar and a player's action row. */
     data object Playlists : AppDestination
 
