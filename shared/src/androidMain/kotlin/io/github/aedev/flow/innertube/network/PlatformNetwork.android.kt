@@ -60,3 +60,11 @@ internal actual fun platformDefaultLocale(): PlatformLocale {
     val locale = Locale.getDefault()
     return PlatformLocale(languageTag = locale.toLanguageTag(), country = locale.country)
 }
+
+internal actual fun countryDisplayName(code: String): String =
+    Locale
+        .Builder()
+        .setRegion(code)
+        .build()
+        .displayCountry
+        .ifBlank { code }

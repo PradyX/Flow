@@ -11,6 +11,7 @@ import io.github.aedev.flow.innertube.models.SongItem
 import io.github.aedev.flow.innertube.models.response.GetLiveChatResponse
 import io.github.aedev.flow.innertube.models.response.WatchMetadataResponse
 import io.github.aedev.flow.innertube.models.response.WatchMetadataResponse.CompactVideo
+import io.github.aedev.flow.innertube.network.countryDisplayName
 import io.github.aedev.flow.innertube.pages.ArtistSectionKind
 import io.github.aedev.flow.innertube.pages.HomePage
 import io.github.aedev.flow.innertube.pages.VideoCommentsSection
@@ -531,6 +532,7 @@ internal fun plannedMusicSections(
     moods: List<MusicSection>,
     seed: Long,
     maturity: String?,
+    charts: List<MusicSection> = emptyList(),
 ): List<MusicSection> {
     val dynamic =
         response.filterNot { section ->
@@ -545,11 +547,67 @@ internal fun plannedMusicSections(
                 MusicHomeSlot.NEW_RELEASES -> listOfNotNull(newReleases)
                 MusicHomeSlot.FROM_COMMUNITY -> listOfNotNull(communityPlaylists)
                 MusicHomeSlot.MOODS_AND_GENRES -> moods
+                MusicHomeSlot.CHARTS -> charts
                 else -> emptyList()
             }
         }
     return listOfNotNull(artistsForYou) + planned
 }
+
+/**
+ * The Charts slot: the ranked playlists and the ranked artists YouTube Music's chart page holds
+ * for this region, under the headings the app gives them. The page's own song lane is a ranked
+ * list the music tab has no body for, so only its cards are carried.
+ */
+internal suspend fun loadMusicCharts(): List<MusicSection> =
+    YouTube
+        .charts(country = YouTube.locale.gl)
+        .mapCatching { page ->
+            val items = page.sections.flatMap { it.items }
+            val playlists =
+                items
+                    .filterIsInstance<PlaylistItem>()
+                    .map { it.toMusicEntry() }
+                    .distinctBy { it.id }
+            val artists =
+                items
+                    .filterIsInstance<ArtistItem>()
+                    .map { it.toMusicEntry() }
+                    .distinctBy { it.id }
+            listOfNotNull(
+                playlists
+                    .takeIf { it.isNotEmpty() }
+                    ?.let {
+                        MusicSection(
+                            title = chartsTitle(page.countryCode),
+                            entries = it,
+                        )
+                    },
+                artists
+                    .takeIf { it.isNotEmpty() }
+                    ?.let {
+                        MusicSection(
+                            title = topChartArtistsTitle(page.countryCode),
+                            entries = it,
+                            shape = MusicSectionShape.ArtistPortraits,
+                        )
+                    },
+            )
+        }.getOrElse { emptyList() }
+
+/** "Charts in <region>", or the worldwide heading when the page charts no region of its own. */
+internal fun chartsTitle(countryCode: String?): String =
+    countryCode
+        ?.takeIf { it.isNotBlank() }
+        ?.let { "Charts in ${countryDisplayName(it)}" }
+        ?: "Global charts"
+
+/** "Top artists in <region>", or the worldwide heading when the page charts no region. */
+internal fun topChartArtistsTitle(countryCode: String?): String =
+    countryCode
+        ?.takeIf { it.isNotBlank() }
+        ?.let { "Top artists in ${countryDisplayName(it)}" }
+        ?: "Top artists worldwide"
 
 /** A shelf the response did not carry, read from YouTube's own music search for it. */
 private suspend fun seededMusicShelf(
@@ -625,6 +683,12 @@ suspend fun loadMusicHome(
                 .orEmpty()
                 .flatMap { group -> group.genres }
                 .distinctBy { it.id }
+        val charts =
+            if (MusicHomeSlot.CHARTS in musicSectionPlan(seed, maturity)) {
+                loadMusicCharts()
+            } else {
+                emptyList()
+            }
         MusicHomeFeed(
             chips = page.chips.orEmpty().mapNotNull { it.toMusicChip() },
             sections =
@@ -636,6 +700,7 @@ suspend fun loadMusicHome(
                     moods = moodsShelf(moods),
                     seed = seed,
                     maturity = maturity,
+                    charts = charts,
                 ),
             continuation = page.continuation,
         )

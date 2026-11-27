@@ -127,4 +127,40 @@ class MusicSectionOrderTest {
             "the mood shelf follows the plan's slot for it",
         )
     }
+
+    @Test
+    fun theChartsShelvesAreDrawnInTheChartsSlot() {
+        val charts =
+            listOf(
+                MusicSection(title = "Charts in United States", entries = listOf(entry("chart_playlist"))),
+                MusicSection(
+                    title = "Top artists in United States",
+                    entries = listOf(entry("chart_artist")),
+                    shape = MusicSectionShape.ArtistPortraits,
+                ),
+            )
+        val planned =
+            plannedMusicSections(
+                response = emptyList(),
+                newReleases = null,
+                communityPlaylists = null,
+                artistsForYou = null,
+                moods = emptyList(),
+                seed = 7L,
+                maturity = "cold_start",
+                charts = charts,
+            )
+
+        assertEquals(charts, planned.take(charts.size), "a cold plan stands the charts first")
+    }
+
+    @Test
+    fun theChartHeadingsNameTheRegionTheyChart() {
+        assertEquals("Charts in United States", chartsTitle("US"))
+        assertEquals("Top artists in United States", topChartArtistsTitle("US"))
+        assertEquals("Global charts", chartsTitle(null))
+        assertEquals("Top artists worldwide", topChartArtistsTitle(null))
+    }
+
+    private fun entry(id: String) = FeedEntry(id = id, title = id, subtitle = null, videoId = null)
 }

@@ -42,3 +42,9 @@ internal data class PlatformLocale(
 )
 
 internal expect fun platformDefaultLocale(): PlatformLocale
+
+/**
+ * A region code as the name the music page prints in its chart headings ("Charts in United
+ * States"), which is `Locale.displayCountry` on the JVM and `NSLocale` on iOS.
+ */
+internal expect fun countryDisplayName(code: String): String

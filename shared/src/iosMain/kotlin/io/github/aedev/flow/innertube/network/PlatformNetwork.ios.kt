@@ -19,3 +19,6 @@ internal actual fun platformDefaultLocale(): PlatformLocale {
     val languageTag = if (country.isEmpty()) language else "$language-$country"
     return PlatformLocale(languageTag = languageTag, country = country)
 }
+
+internal actual fun countryDisplayName(code: String): String =
+    NSLocale.currentLocale.localizedStringForCountryCode(code)?.takeIf { it.isNotBlank() } ?: code

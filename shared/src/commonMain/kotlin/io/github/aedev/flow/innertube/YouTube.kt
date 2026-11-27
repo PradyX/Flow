@@ -19,6 +19,7 @@ import io.github.aedev.flow.innertube.models.YouTubeClient.Companion.ANDROID_MUS
 import io.github.aedev.flow.innertube.models.YouTubeClient.Companion.WEB
 import io.github.aedev.flow.innertube.models.YouTubeClient.Companion.WEB_REMIX
 import io.github.aedev.flow.innertube.models.YouTubeLocale
+import io.github.aedev.flow.innertube.models.body.BrowseBody
 import io.github.aedev.flow.innertube.models.getContinuation
 import io.github.aedev.flow.innertube.models.getItems
 import io.github.aedev.flow.innertube.models.response.AccountMenuResponse
@@ -356,6 +357,24 @@ object YouTube {
                     ?: return@runCatching MusicVideoChart(title = "")
             val page = videoPlaylistPage(playlist.id).getOrThrow()
             MusicVideoChart(title = playlist.title, entries = page.videos.ranked())
+        }
+
+    /**
+     * YouTube Music's chart page: the playlists it ranks for a region and the artists it ranks
+     * there. The country is a selection the page itself understands, so a region it does not
+     * chart answers the same page for everyone and reports no country of its own.
+     */
+    suspend fun charts(country: String? = null): Result<ChartsPage> =
+        runCatching {
+            val response =
+                innerTube
+                    .browse(
+                        client = WEB_REMIX,
+                        browseId = "FEmusic_charts",
+                        params = "ggMGCgQIgAQ%3D",
+                        formData = country?.let { BrowseBody.FormData(selectedValues = listOf(it)) },
+                    ).body<BrowseResponse>()
+            ChartsPage.fromBrowseResponse(response, country = country)
         }
 
     // ---- search ----
