@@ -33,7 +33,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -42,25 +41,12 @@ import io.github.aedev.flow.presentation.feed.FeedEntry
 import io.github.aedev.flow.presentation.feed.MoodGenre
 import io.github.aedev.flow.presentation.feed.MusicSection
 import io.github.aedev.flow.presentation.feed.MusicSectionShape
-import io.github.aedev.flow.presentation.ui.FlowSegmentedGap
 import io.github.aedev.flow.presentation.ui.MediaArtwork
 import io.github.aedev.flow.presentation.ui.MusicMoodButton
 import io.github.aedev.flow.presentation.ui.MusicMoodTone
-import io.github.aedev.flow.presentation.ui.flowRowGroupShape
 import io.github.aedev.flow.ui.theme.Dimensions
 
 private const val DENSE_TILE_ROWS = 3
-
-/** How many song rows a browse page's track lane stacks before it scrolls sideways. */
-private const val TRACK_LANE_ROWS = 4
-
-/** How far a song row's byline fades into the row's container, as the app's compact row does. */
-private const val TRACK_LANE_SUBTITLE_ALPHA = 0.8f
-
-/** A track lane's narrowest and widest column, and the strip of the next column left in view. */
-internal val TrackLaneMinWidth = 240.dp
-internal val TrackLaneMaxWidth = 360.dp
-internal val TrackLanePeek = 48.dp
 
 /** How many rows of mood buttons the shelf shows before it scrolls sideways. */
 private const val MOOD_ROWS = 3
@@ -74,7 +60,6 @@ internal fun MusicSectionBody(
     section: MusicSection,
     tileWidth: Dp,
     moodWidth: Dp,
-    trackLaneWidth: Dp,
     onOpenPlaylist: (playlistId: String, title: String, thumbnailUrl: String?) -> Unit,
     onOpenVideo: (videoId: String, title: String, thumbnailUrl: String?) -> Unit,
     onOpenArtist: (artistId: String, name: String, thumbnailUrl: String?) -> Unit,
@@ -115,103 +100,6 @@ internal fun MusicSectionBody(
                 moodWidth = moodWidth,
                 onOpenMood = onOpenMood,
             )
-        }
-
-        MusicSectionShape.TrackLane -> {
-            MusicCompactTrackLane(
-                entries = section.entries,
-                laneWidth = trackLaneWidth,
-                onOpenPlaylist = onOpenPlaylist,
-                onOpenVideo = onOpenVideo,
-                onOpenArtist = onOpenArtist,
-            )
-        }
-    }
-}
-
-/**
- * Four rows of compact song rows, scrolled sideways and segmented down each column — the shape the
- * app's browse body gives a shelf of songs.
- */
-@Composable
-private fun MusicCompactTrackLane(
-    entries: List<FeedEntry>,
-    laneWidth: Dp,
-    onOpenPlaylist: (playlistId: String, title: String, thumbnailUrl: String?) -> Unit,
-    onOpenVideo: (videoId: String, title: String, thumbnailUrl: String?) -> Unit,
-    onOpenArtist: (artistId: String, name: String, thumbnailUrl: String?) -> Unit,
-) {
-    LazyHorizontalGrid(
-        rows = GridCells.Fixed(TRACK_LANE_ROWS),
-        contentPadding = PaddingValues(horizontal = Dimensions.ContentPaddingHorizontal),
-        horizontalArrangement = Arrangement.spacedBy(Dimensions.DenseTileGap),
-        verticalArrangement = Arrangement.spacedBy(FlowSegmentedGap),
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(Dimensions.ListItemHeight * TRACK_LANE_ROWS + FlowSegmentedGap * (TRACK_LANE_ROWS - 1)),
-    ) {
-        itemsIndexed(entries, key = { _, entry -> entry.id }) { index, entry ->
-            val columnStart = (index / TRACK_LANE_ROWS) * TRACK_LANE_ROWS
-            val rowsInColumn = minOf(TRACK_LANE_ROWS, entries.size - columnStart)
-            MusicCompactTrackRow(
-                entry = entry,
-                width = laneWidth,
-                shape = flowRowGroupShape(index = index - columnStart, count = rowsInColumn),
-                open = musicEntryClick(entry, onOpenPlaylist, onOpenVideo, onOpenArtist),
-            )
-        }
-    }
-}
-
-/** One song row: a rounded still, its title and byline, in the row's slice of its column's group. */
-@Composable
-private fun MusicCompactTrackRow(
-    entry: FeedEntry,
-    width: Dp,
-    shape: Shape,
-    open: (() -> Unit)?,
-) {
-    Row(
-        modifier =
-            Modifier
-                .width(width)
-                .height(Dimensions.ListItemHeight)
-                .clip(shape)
-                .background(MaterialTheme.colorScheme.surfaceContainer)
-                .clickable(enabled = open != null) { open?.invoke() }
-                .padding(horizontal = Dimensions.ContentPaddingHorizontal, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        MediaArtwork(
-            title = entry.title,
-            imageUrl = entry.thumbnailUrl,
-            shape = MaterialTheme.shapes.small,
-            modifier = Modifier.size(Dimensions.ListThumbnailSize),
-        )
-        Spacer(modifier = Modifier.width(16.dp))
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text(
-                text = entry.title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            entry.subtitle?.takeIf { it.isNotBlank() }?.let { line ->
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = line,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = TRACK_LANE_SUBTITLE_ALPHA),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
         }
     }
 }

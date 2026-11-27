@@ -371,9 +371,6 @@ enum class MusicSectionShape {
     /** Square cards, two lines under the artwork. */
     CollectionCards,
 
-    /** Compact song rows, four deep, scrolled sideways: how a browse page draws a shelf of songs. */
-    TrackLane,
-
     /** Mood and genre buttons: the shelf of destinations the page carries beside its carousels. */
     MoodButtons,
 }
@@ -420,17 +417,25 @@ private fun HomePage.Section.toMusicSection(): MusicSection? {
 }
 
 /**
- * A browse page's carousels as shelves, shaped the way the app shapes its browse body: a shelf made
- * only of songs is a lane of compact rows, and every other shelf a lane of square collection cards,
- * whose artist entries take the artist shape with a centred name.
+ * A browse page's carousels as shelves, the way the app's own browse page draws them: a lane of
+ * square collection cards, whose artist entries take the artist shape with a centred name.
+ *
+ * The app reads a browse response through `YouTube.browse`, which keeps only the two-row entries of
+ * each carousel (app/src/main/java/io/github/aedev/flow/innertube/YouTube.kt:1883-1886) and drops
+ * every responsive list item, so a songs carousel reaches its page as an empty shelf and is left
+ * out (app/src/main/java/io/github/aedev/flow/ui/screens/music/YouTubeBrowseViewModel.kt:49-56).
+ * This keeps the same entries, so a mood shows the shelves the app shows and nothing extra.
  */
 internal fun HomePage.toBrowseMusicSections(): List<MusicSection> = sections.mapNotNull { it.toBrowseMusicSection() }
 
 private fun HomePage.Section.toBrowseMusicSection(): MusicSection? {
-    val entries = items.map { it.toMusicEntry() }
+    val entries =
+        items
+            .filterNot { it is SongItem }
+            .map { it.toMusicEntry() }
+            .distinctBy { it.id }
     if (entries.isEmpty()) return null
-    val shape = if (items.all { it is SongItem }) MusicSectionShape.TrackLane else MusicSectionShape.CollectionCards
-    return MusicSection(title = title, entries = entries, shape = shape)
+    return MusicSection(title = title, entries = entries, shape = MusicSectionShape.CollectionCards)
 }
 
 /** The heading the app gives its mood and genre shelf. */
