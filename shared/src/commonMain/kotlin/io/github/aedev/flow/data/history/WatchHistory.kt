@@ -15,6 +15,8 @@ data class WatchHistoryEntry(
     val durationMs: Long = 0,
     val timeWatchedMs: Long = 0,
     val watchedAtMillis: Long = 0,
+    /** True when the track was played from a music shelf, which is the app's music history. */
+    val music: Boolean = false,
 )
 
 /**

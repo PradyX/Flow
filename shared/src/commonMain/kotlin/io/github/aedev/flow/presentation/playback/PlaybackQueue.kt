@@ -23,6 +23,8 @@ data class QueueTrack(
     val videoId: String,
     val title: String,
     val thumbnailUrl: String? = null,
+    /** Set when a music shelf started the track, so listening history stays music-only. */
+    val music: Boolean = false,
 )
 
 /**

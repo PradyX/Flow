@@ -567,16 +567,21 @@ internal fun plannedMusicSections(
 }
 
 /**
- * The Speed dial slot: what the listener played most recently, newest first, in the compact tiles the
- * app heads "Speed dial". The app ranks its own history, likes and listens here; this port ranks the
- * history it keeps, which is the only one of the three it has.
+ * The Speed dial slot: what the listener played most recently from a music shelf, newest first, in the
+ * compact tiles the app heads "Speed dial". The app keeps a music-only history (PlaylistRepository's
+ * `history`, filtered by `isAudioMusicCandidate`) rather than the video watch history, so this port
+ * takes only the entries its music route recorded and applies the app's own song rule: a run time
+ * between 30 seconds and 20 minutes, or one not yet known.
  */
 internal fun loadSpeedDial(): MusicSection? {
     val entries =
         WatchHistory
             .decode(loadWatchHistoryJson())
             .entries
-            .take(MUSIC_SPEED_DIAL_TRACKS)
+            .filter { entry ->
+                val seconds = entry.durationMs / 1000
+                entry.music && entry.videoId.isNotBlank() && (seconds == 0L || seconds in 30..1200)
+            }.take(MUSIC_SPEED_DIAL_TRACKS)
             .map { entry ->
                 FeedEntry(
                     id = entry.videoId,

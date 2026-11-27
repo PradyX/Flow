@@ -288,8 +288,8 @@ fun App(
         }
     // One row per video, newest first: the player writes it as it plays, so History has something
     // to resume even when the process was killed mid-track.
-    val recordWatch: (String, String, String?, String?, Long, Long) -> Unit =
-        { videoId, title, channelName, thumbnailUrl, positionMs, durationMs ->
+    val recordWatch: (String, String, String?, String?, Long, Long, Boolean) -> Unit =
+        { videoId, title, channelName, thumbnailUrl, positionMs, durationMs, fromMusicShelf ->
             if (videoId.isNotBlank()) {
                 val existing = history.entry(videoId)
                 saveHistory(
@@ -302,6 +302,7 @@ fun App(
                             positionMs = positionMs,
                             durationMs = durationMs.takeIf { it > 0 } ?: existing?.durationMs ?: 0,
                             watchedAtMillis = nowMillis(),
+                            music = fromMusicShelf || existing?.music == true,
                         ),
                     ),
                 )
@@ -336,7 +337,7 @@ fun App(
                     // A new track starts at zero; the checkpoint says so before the first tick.
                     savePlaybackCheckpointJson(PlaybackCheckpoint(videoId, 0).encode())
                     val track = queue.tracks[index]
-                    recordWatch(track.videoId, track.title, null, track.thumbnailUrl, 0, 0)
+                    recordWatch(track.videoId, track.title, null, track.thumbnailUrl, 0, 0, track.music)
                     // Only a player page is re-pointed at the new track. A viewer who is on a tab
                     // sees the change in the mini player, and replacing the tab with the player
                     // page would take the tab out of the stack a relaunch restores.
@@ -363,7 +364,15 @@ fun App(
             val now = nowMillis()
             if (now - lastHistoryWriteMs > HISTORY_WRITE_INTERVAL_MS) {
                 lastHistoryWriteMs = now
-                recordWatch(videoId, title, null, thumbnailUrl, positionMs, durationMs)
+                recordWatch(
+                    videoId,
+                    title,
+                    null,
+                    thumbnailUrl,
+                    positionMs,
+                    durationMs,
+                    playerQueue?.current?.let { it.videoId == videoId && it.music } == true,
+                )
             }
         }
     // The last guaranteed moment: the host going to the background writes the session and the
@@ -379,7 +388,7 @@ fun App(
             }
             queue.current?.let { track ->
                 lastHistoryWriteMs = nowMillis()
-                recordWatch(track.videoId, track.title, null, track.thumbnailUrl, position, queuePlayer.durationMs())
+                recordWatch(track.videoId, track.title, null, track.thumbnailUrl, position, queuePlayer.durationMs(), track.music)
             }
         }
     }
@@ -454,13 +463,13 @@ fun App(
     val queueModes: (PlaybackQueue) -> Unit = { changed -> playerQueue = changed }
     // A video at a moment: where History stopped, or the spot a note is about. The engine resumes
     // there through the same queue path everything else plays through.
-    val playAt: (String, String, String?, Long) -> Unit = { videoId, title, thumbnailUrl, positionMs ->
+    val startTrack: (String, String, String?, Long, Boolean) -> Unit = { videoId, title, thumbnailUrl, positionMs, music ->
         val at = positionMs.coerceAtLeast(0)
         if (playerQueue?.current?.videoId == videoId && queuePlayer.currentVideoId() == videoId) {
             queuePlayer.select(videoId, at)
             queuePositionMs = at
         } else {
-            PlaybackQueue.of(listOf(QueueTrack(videoId, title, thumbnailUrl)))?.let { queue ->
+            PlaybackQueue.of(listOf(QueueTrack(videoId, title, thumbnailUrl, music = music)))?.let { queue ->
                 playerQueue = queue
                 queuePositionMs = at
             }
@@ -468,11 +477,18 @@ fun App(
         val page = AppDestination.Player(videoId, title, thumbnailUrl)
         router.push(page)
     }
+    val playAt: (String, String, String?, Long) -> Unit = { videoId, title, thumbnailUrl, positionMs ->
+        startTrack(videoId, title, thumbnailUrl, positionMs, false)
+    }
     // Every video the app opens plays through the one session-backed queue: tapping a card is the
     // same act as resuming a note, so the notification, the lock screen and the media keys always
     // describe what is actually being heard.
     val openVideo: (String, String, String?) -> Unit = { videoId, title, thumbnailUrl ->
         playAt(videoId, title, thumbnailUrl, 0)
+    }
+    // A music shelf's row: the same act, recorded as music, which is the history Speed dial draws.
+    val openMusicVideo: (String, String, String?) -> Unit = { videoId, title, thumbnailUrl ->
+        startTrack(videoId, title, thumbnailUrl, 0, true)
     }
     // The bar's close action: the engine drops its playlist, so the session stops publishing and
     // the foreground service lets go of the notification. Clearing the queue is what takes the bar
@@ -675,7 +691,7 @@ fun App(
                                             router.push(AppDestination.Playlist(playlistId, title, thumbnailUrl))
                                         },
                                         onOpenVideo = { videoId, title, thumbnailUrl ->
-                                            openVideo(videoId, title, thumbnailUrl)
+                                            openMusicVideo(videoId, title, thumbnailUrl)
                                         },
                                         onOpenArtist = { artistId, name, thumbnailUrl ->
                                             router.push(AppDestination.Artist(artistId, name, thumbnailUrl))
@@ -1089,6 +1105,9 @@ fun App(
                                                 thumbnailUrl ?: destination.thumbnailUrl,
                                                 0,
                                                 0,
+                                                playerQueue?.current?.let {
+                                                    it.videoId == destination.videoId && it.music
+                                                } == true,
                                             )
                                         },
                                     )
