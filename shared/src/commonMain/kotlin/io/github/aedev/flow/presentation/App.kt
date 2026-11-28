@@ -137,6 +137,7 @@ import io.github.aedev.flow.presentation.ui.FlowTab
 import io.github.aedev.flow.presentation.ui.FlowTopBar
 import io.github.aedev.flow.presentation.ui.InstallFlowImageLoader
 import io.github.aedev.flow.presentation.ui.MiniPlayer
+import io.github.aedev.flow.presentation.ui.NotificationsBellAction
 import io.github.aedev.flow.presentation.ui.WideLayoutMinWidth
 import io.github.aedev.flow.presentation.ui.isVideoPlaybackSupported
 import io.github.aedev.flow.resources.Res
@@ -731,6 +732,7 @@ fun App(
                             TopBar(
                                 router = router,
                                 destination = destination,
+                                unreadNotifications = inbox.unreadCount,
                                 onOpenProfiles = { showProfiles = true },
                             )
                         }
@@ -753,6 +755,7 @@ fun App(
                                             TopBar(
                                                 router = router,
                                                 destination = AppDestination.Home,
+                                                unreadNotifications = inbox.unreadCount,
                                                 onOpenProfiles = { showProfiles = true },
                                             )
                                         },
@@ -782,6 +785,7 @@ fun App(
                                         },
                                         onOpenProfiles = { showProfiles = true },
                                         onOpenNotifications = { router.push(AppDestination.Notifications) },
+                                        unreadNotifications = inbox.unreadCount,
                                         onUnsubscribe = { channel ->
                                             val next = subscriptions.without(channel.id)
                                             saveSubscriptions(next)
@@ -813,6 +817,7 @@ fun App(
                                             router.push(AppDestination.Mood(mood.browseId, mood.params, mood.title))
                                         },
                                         onOpenNotifications = { router.push(AppDestination.Notifications) },
+                                        unreadNotifications = inbox.unreadCount,
                                         onOpenSettings = { router.push(AppDestination.Settings) },
                                         onOpenProfiles = { showProfiles = true },
                                     )
@@ -1435,6 +1440,7 @@ private fun onSelectTab(router: AppRouter): (FlowTab) -> Unit =
 private fun TopBar(
     router: AppRouter,
     destination: AppDestination,
+    unreadNotifications: Int,
     onOpenProfiles: () -> Unit,
 ) {
     when (destination) {
@@ -1448,12 +1454,10 @@ private fun TopBar(
                             contentDescription = stringResource(Res.string.action_search),
                         )
                     }
-                    IconButton(onClick = { router.push(AppDestination.Notifications) }) {
-                        Icon(
-                            imageVector = FlowIcons.Bell,
-                            contentDescription = stringResource(Res.string.notifications_title),
-                        )
-                    }
+                    NotificationsBellAction(
+                        unreadCount = unreadNotifications,
+                        onClick = { router.push(AppDestination.Notifications) },
+                    )
                     IconButton(onClick = { router.push(AppDestination.Settings) }) {
                         Icon(
                             imageVector = FlowIcons.SettingsOutlined,

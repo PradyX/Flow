@@ -61,6 +61,7 @@ import io.github.aedev.flow.presentation.ui.FlowIcons
 import io.github.aedev.flow.presentation.ui.FlowProfileAction
 import io.github.aedev.flow.presentation.ui.FlowSubscribeButton
 import io.github.aedev.flow.presentation.ui.FlowTopBar
+import io.github.aedev.flow.presentation.ui.NotificationsBellAction
 import io.github.aedev.flow.resources.Res
 import io.github.aedev.flow.resources.action_back
 import io.github.aedev.flow.resources.action_undo
@@ -110,6 +111,7 @@ internal fun SubscriptionsScreen(
     onOpenChannel: (channelId: String, name: String) -> Unit,
     onOpenProfiles: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
+    unreadNotifications: Int = 0,
     onUnsubscribe: (Subscription) -> Unit = {},
     onRestoreSubscription: (Subscription, index: Int) -> Unit = { _, _ -> },
 ) {
@@ -176,12 +178,7 @@ internal fun SubscriptionsScreen(
                         contentDescription = stringResource(Res.string.search_subscriptions),
                     )
                 }
-                IconButton(onClick = onOpenNotifications) {
-                    Icon(
-                        imageVector = FlowIcons.Bell,
-                        contentDescription = stringResource(Res.string.notifications_title),
-                    )
-                }
+                NotificationsBellAction(unreadCount = unreadNotifications, onClick = onOpenNotifications)
                 FlowProfileAction(onClick = onOpenProfiles)
             },
         )

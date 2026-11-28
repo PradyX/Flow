@@ -27,6 +27,7 @@ import io.github.aedev.flow.presentation.feed.loadMusicHome
 import io.github.aedev.flow.presentation.ui.FlowIcons
 import io.github.aedev.flow.presentation.ui.FlowProfileAction
 import io.github.aedev.flow.presentation.ui.FlowTopBar
+import io.github.aedev.flow.presentation.ui.NotificationsBellAction
 import io.github.aedev.flow.resources.Res
 import io.github.aedev.flow.resources.action_search
 import io.github.aedev.flow.resources.music_title
@@ -50,6 +51,7 @@ internal fun MusicScreen(
     onOpenMoods: () -> Unit,
     onOpenMood: (MoodGenre) -> Unit,
     onOpenNotifications: () -> Unit,
+    unreadNotifications: Int,
     onOpenSettings: () -> Unit,
     onOpenProfiles: () -> Unit,
 ) {
@@ -84,12 +86,7 @@ internal fun MusicScreen(
                         contentDescription = stringResource(Res.string.action_search),
                     )
                 }
-                IconButton(onClick = onOpenNotifications) {
-                    Icon(
-                        imageVector = FlowIcons.Bell,
-                        contentDescription = stringResource(Res.string.notifications_title),
-                    )
-                }
+                NotificationsBellAction(unreadCount = unreadNotifications, onClick = onOpenNotifications)
                 IconButton(onClick = onOpenSettings) {
                     Icon(
                         imageVector = FlowIcons.SettingsOutlined,

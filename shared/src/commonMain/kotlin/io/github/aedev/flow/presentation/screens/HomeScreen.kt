@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -20,10 +19,8 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.BottomAppBarDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -31,7 +28,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberBottomAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,7 +38,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -75,7 +70,6 @@ import io.github.aedev.flow.resources.home_feedback_not_interested
 import io.github.aedev.flow.resources.home_new_videos
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
-import kotlin.math.roundToInt
 
 /** The app's Home grid: as many columns of video cards as the window fits, chips above them. */
 private const val MAX_AUTO_COLUMNS = 4
@@ -130,7 +124,6 @@ private fun homeGrid(width: Dp): HomeGrid {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun HomeScreen(
     state: HomeFeedState,
@@ -221,10 +214,9 @@ internal fun HomeScreen(
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val grid = homeGrid(maxWidth)
-        // The header is the shell's own bar plus the chips, and it leaves with the feed: the
-        // reference bar slides away on scroll and snaps back on the way up.
-        val barState = rememberBottomAppBarState()
-        val scrollBehavior = BottomAppBarDefaults.exitAlwaysScrollBehavior(state = barState)
+        // The header is the shell's own bar plus the chips, held over the feed the way the app
+        // keeps every other page's bar: the cards scroll beneath it instead of moving away with
+        // it and leaving the strip it occupies blank.
         var headerHeightPx by remember { mutableIntStateOf(0) }
         val headerHeight = with(LocalDensity.current) { headerHeightPx.toDp() }
         val readyVideos = (state.feed as? LoadState.Ready)?.value.orEmpty()
@@ -239,12 +231,7 @@ internal fun HomeScreen(
                     addAll(readyVideos.drop(columns))
                 }
             }
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .nestedScroll(scrollBehavior.nestedScrollConnection),
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(grid.columns),
                 state = state.gridState,
@@ -333,10 +320,7 @@ internal fun HomeScreen(
                     Modifier
                         .fillMaxWidth()
                         .background(MaterialTheme.colorScheme.background)
-                        .onSizeChanged { size ->
-                            headerHeightPx = size.height
-                            barState.heightOffsetLimit = -size.height.toFloat()
-                        }.offset { IntOffset(0, barState.heightOffset.roundToInt()) },
+                        .onSizeChanged { size -> headerHeightPx = size.height },
             ) {
                 topBar()
                 HomeChipRow(
@@ -362,20 +346,13 @@ internal fun HomeScreen(
                         state.chipFeeds[state.selectedChip] = fresh
                         state.feed = LoadState.Ready(fresh)
                         pendingFeed = null
-                        barState.heightOffset = 0f
                         scope.launch { state.gridState.scrollToItem(0) }
                     },
                     contentPadding = ButtonDefaults.ExtraSmallContentPadding,
                     modifier =
                         Modifier
                             .align(Alignment.TopCenter)
-                            .statusBarsPadding()
-                            .offset {
-                                IntOffset(
-                                    x = 0,
-                                    y = (headerHeightPx + barState.heightOffset).roundToInt().coerceAtLeast(0),
-                                )
-                            },
+                            .offset { IntOffset(x = 0, y = headerHeightPx) },
                 ) {
                     Icon(
                         imageVector = FlowIcons.ArrowUpward,

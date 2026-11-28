@@ -435,6 +435,8 @@
     <string name="saved_shorts_title">Saved Shorts</string>
     <string name="saved_shorts_empty">Shorts you save from the reel show up here.</string>
     <string name="notifications_title">Notifications</string>
+    <string name="notifications_unread">Notifications, %1$d unread</string>
+    <string name="notification_badge_more">9+</string>
     <string name="notifications_open_settings">Notification settings</string>
     <string name="notifications_empty_title">Peace and quiet</string>
     <string name="notifications_empty_body">You're all caught up! New updates from your subscriptions will appear here.</string>
