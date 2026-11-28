@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +39,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -70,6 +72,7 @@ import io.github.aedev.flow.resources.home_feedback_not_interested
 import io.github.aedev.flow.resources.home_new_videos
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
+import kotlin.math.roundToInt
 
 /** The app's Home grid: as many columns of video cards as the window fits, chips above them. */
 private const val MAX_AUTO_COLUMNS = 4
@@ -88,9 +91,6 @@ private val GridVerticalInset = 0.dp
 
 /** The gap between a card row and the next; cards carry their own bottom inset. */
 private val GridRowSpacing = 4.dp
-
-/** The feed's own gap under the header, as the reference grid carries. */
-private val GridTopGap = 4.dp
 
 /** How old a loaded feed may be before returning to Home asks for it again. */
 private const val HOME_REFRESH_AFTER_MS = 5L * 60L * 1000L
@@ -124,6 +124,7 @@ private fun homeGrid(width: Dp): HomeGrid {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun HomeScreen(
     state: HomeFeedState,
@@ -214,9 +215,10 @@ internal fun HomeScreen(
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val grid = homeGrid(maxWidth)
-        // The header is the shell's own bar plus the chips, held over the feed the way the app
-        // keeps every other page's bar: the cards scroll beneath it instead of moving away with
-        // it and leaving the strip it occupies blank.
+        // The bar stays put and the chips ride with the feed, which is what the reference's home
+        // does: only the chips scroll away, and the cards pass behind the bar and never leave a
+        // blank strip or a cut first row.
+        val chipRowPx = with(LocalDensity.current) { ChipRowHeight.roundToPx() }
         var headerHeightPx by remember { mutableIntStateOf(0) }
         val headerHeight = with(LocalDensity.current) { headerHeightPx.toDp() }
         val readyVideos = (state.feed as? LoadState.Ready)?.value.orEmpty()
@@ -231,7 +233,7 @@ internal fun HomeScreen(
                     addAll(readyVideos.drop(columns))
                 }
             }
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(grid.columns),
                 state = state.gridState,
@@ -239,12 +241,27 @@ internal fun HomeScreen(
                 contentPadding =
                     PaddingValues(
                         start = grid.contentPadding,
-                        top = headerHeight + GridTopGap,
+                        top = headerHeight,
                         end = grid.contentPadding,
                         bottom = GridVerticalInset,
                     ),
                 verticalArrangement = Arrangement.spacedBy(GridRowSpacing),
             ) {
+                item(key = "chips", span = { GridItemSpan(maxLineSpan) }) {
+                    HomeChipRow(
+                        chips = chips,
+                        selected = state.selectedChip,
+                        onSelect = { chip ->
+                            if (chip.key == state.selectedChip.key) {
+                                state.chipFeeds.remove(chip)
+                                attempt++
+                            } else {
+                                state.selectedChip = chip
+                            }
+                        },
+                        horizontalInset = ChipRowInset,
+                    )
+                }
                 when (state.feed) {
                     LoadState.Loading -> {
                         item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
@@ -323,19 +340,6 @@ internal fun HomeScreen(
                         .onSizeChanged { size -> headerHeightPx = size.height },
             ) {
                 topBar()
-                HomeChipRow(
-                    chips = chips,
-                    selected = state.selectedChip,
-                    onSelect = { chip ->
-                        if (chip.key == state.selectedChip.key) {
-                            state.chipFeeds.remove(chip)
-                            attempt++
-                        } else {
-                            state.selectedChip = chip
-                        }
-                    },
-                    horizontalInset = ChipRowInset,
-                )
             }
 
             // A fresh list the viewer has not seen yet waits behind the cards on screen; the pill
@@ -352,7 +356,13 @@ internal fun HomeScreen(
                     modifier =
                         Modifier
                             .align(Alignment.TopCenter)
-                            .offset { IntOffset(x = 0, y = headerHeightPx) },
+                            .offset {
+                                val scrolled = state.gridState.firstVisibleItemScrollOffset
+                                IntOffset(
+                                    x = 0,
+                                    y = (headerHeightPx + chipRowPx - scrolled).coerceAtLeast(headerHeightPx),
+                                )
+                            },
                 ) {
                     Icon(
                         imageVector = FlowIcons.ArrowUpward,
