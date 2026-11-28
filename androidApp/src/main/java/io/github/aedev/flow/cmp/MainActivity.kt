@@ -19,6 +19,7 @@ import io.github.aedev.flow.data.local.initializeLocalMediaStorage
 import io.github.aedev.flow.data.music.initializePlaylistSortStorage
 import io.github.aedev.flow.data.navigation.initializeNavigationStateStorage
 import io.github.aedev.flow.data.notes.initializeVideoNotesStorage
+import io.github.aedev.flow.data.notifications.initializeNotificationInboxStorage
 import io.github.aedev.flow.data.playback.initializePlaybackCheckpointStorage
 import io.github.aedev.flow.data.playback.initializePlaybackSessionStorage
 import io.github.aedev.flow.data.playlists.initializeUserPlaylistsStorage
@@ -48,6 +49,7 @@ class MainActivity : ComponentActivity() {
         initializePlaybackSessionStorage(applicationContext)
         initializePlaybackCheckpointStorage(applicationContext)
         initializeWatchHistoryStorage(applicationContext)
+        initializeNotificationInboxStorage(applicationContext)
         initializeLocalMediaStorage(applicationContext)
         initializeVideoNotesStorage(applicationContext)
         initializeUserPlaylistsStorage(applicationContext)

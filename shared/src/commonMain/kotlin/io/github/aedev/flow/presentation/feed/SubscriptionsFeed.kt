@@ -4,6 +4,8 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.github.aedev.flow.data.notifications.ChannelUploads
+import io.github.aedev.flow.data.notifications.InboxUpload
 import io.github.aedev.flow.data.subscriptions.Subscription
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -29,6 +31,11 @@ data class SubscriptionsFeed(
     val videos: List<SubscriptionVideo>,
     /** Channels whose uploads could not be fetched; they are still listed in the strip. */
     val failedChannelCount: Int = 0,
+    /**
+     * Each channel's own uploads, newest first, kept per channel instead of merged: the inbox's
+     * check asks one channel at a time for the entries published since it was last read.
+     */
+    val uploads: List<ChannelUploads> = emptyList(),
 )
 
 /** The Subscriptions tab's state, owned by the shell so switching tabs does not refetch. */
@@ -97,10 +104,31 @@ suspend fun loadSubscriptions(channels: List<Subscription>): Result<Subscription
                         .thenBy { it.channelIndex },
                 ).distinctBy { it.video.entry.id }
                 .map { it.video }
+        val uploads =
+            loaded.mapIndexed { index, (channel, feed) ->
+                ChannelUploads(
+                    channelId = channel.id,
+                    channelName = strip[index].name,
+                    uploads =
+                        feed
+                            ?.videos
+                            .orEmpty()
+                            .take(VIDEOS_PER_CHANNEL)
+                            .mapNotNull { entry ->
+                                val videoId = entry.videoId ?: return@mapNotNull null
+                                InboxUpload(
+                                    videoId = videoId,
+                                    title = entry.title,
+                                    thumbnailUrl = entry.thumbnailUrl,
+                                )
+                            },
+                )
+            }
         SubscriptionsFeed(
             channels = strip,
             videos = videos,
             failedChannelCount = loaded.count { (_, feed) -> feed == null },
+            uploads = uploads,
         )
     }
 

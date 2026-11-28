@@ -438,6 +438,34 @@
     <string name="notifications_open_settings">Notification settings</string>
     <string name="notifications_empty_title">Peace and quiet</string>
     <string name="notifications_empty_body">You're all caught up! New updates from your subscriptions will appear here.</string>
+    <string name="inbox_section_new">New</string>
+    <string name="inbox_section_today">Today</string>
+    <string name="inbox_section_yesterday">Yesterday</string>
+    <string name="inbox_section_last_week">Last 7 days</string>
+    <string name="inbox_section_earlier">Earlier</string>
+    <string name="inbox_meta">%1$s · %2$s</string>
+    <string name="inbox_time_just_now">Just now</string>
+    <plurals name="inbox_time_minutes">
+        <item quantity="one">%1$d minute ago</item>
+        <item quantity="other">%1$d minutes ago</item>
+    </plurals>
+    <plurals name="inbox_time_hours">
+        <item quantity="one">%1$d hour ago</item>
+        <item quantity="other">%1$d hours ago</item>
+    </plurals>
+    <plurals name="inbox_time_days">
+        <item quantity="one">%1$d day ago</item>
+        <item quantity="other">%1$d days ago</item>
+    </plurals>
+    <string name="inbox_remove">Remove notification</string>
+    <string name="inbox_removed">Notification removed</string>
+    <string name="inbox_clear_action">Clear all notifications</string>
+    <string name="inbox_clear_title">Clear all notifications?</string>
+    <plurals name="inbox_clear_body">
+        <item quantity="one">Remove %1$d notification?</item>
+        <item quantity="other">Remove all %1$d notifications?</item>
+    </plurals>
+    <string name="inbox_clear_confirm">Clear all</string>
     <string name="moods_title">Moods &amp; genres</string>
     <string name="moods_index_title">Moods &amp; Genres</string>
     <string name="section_mood_and_genres">Mood and Genres</string>

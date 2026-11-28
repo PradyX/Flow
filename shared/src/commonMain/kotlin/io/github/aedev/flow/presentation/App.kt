@@ -46,6 +46,10 @@ import io.github.aedev.flow.data.navigation.saveNavigationStateJson
 import io.github.aedev.flow.data.notes.VideoNotes
 import io.github.aedev.flow.data.notes.loadVideoNotesJson
 import io.github.aedev.flow.data.notes.saveVideoNotesJson
+import io.github.aedev.flow.data.notifications.InboxNotification
+import io.github.aedev.flow.data.notifications.NotificationInbox
+import io.github.aedev.flow.data.notifications.loadNotificationInbox
+import io.github.aedev.flow.data.notifications.saveNotificationInbox
 import io.github.aedev.flow.data.playback.clearPlaybackCheckpointJson
 import io.github.aedev.flow.data.playback.clearPlaybackSessionJson
 import io.github.aedev.flow.data.playback.loadPlaybackCheckpointJson
@@ -79,6 +83,7 @@ import io.github.aedev.flow.presentation.downloads.downloadMedia
 import io.github.aedev.flow.presentation.feed.ChannelBook
 import io.github.aedev.flow.presentation.feed.FeedEntry
 import io.github.aedev.flow.presentation.feed.HomeFeedState
+import io.github.aedev.flow.presentation.feed.LoadState
 import io.github.aedev.flow.presentation.feed.MusicFeedState
 import io.github.aedev.flow.presentation.feed.SearchFeedState
 import io.github.aedev.flow.presentation.feed.SearchSession
@@ -187,6 +192,14 @@ fun App(
     var settings by remember { mutableStateOf(AppSettings.decode(loadAppSettingsJson())) }
     // The records this shell keeps beside the player: what was watched and what was noted.
     var history by remember { mutableStateOf(WatchHistory.decode(loadWatchHistoryJson())) }
+    // The inbox the bell opens: the uploads the Subscriptions tab read after each channel's last
+    // visit, and the newest upload every channel had when it was read.
+    var inbox by remember { mutableStateOf(loadNotificationInbox() ?: NotificationInbox()) }
+    var lastRemovedInboxRow by remember { mutableStateOf<Pair<InboxNotification, Int>?>(null) }
+    val saveInbox: (NotificationInbox) -> Unit = { next ->
+        inbox = next
+        saveNotificationInbox(next)
+    }
     // The files imported from this device, newest first. The record is the app's; the bytes stay
     // where the viewer keeps them, which is what makes an import instant and free.
     var localMedia by remember { mutableStateOf(LocalMediaLibrary.decode(loadLocalMediaJson())) }
@@ -632,6 +645,14 @@ fun App(
     val homeFeed = remember { HomeFeedState() }
     val musicFeed = remember { MusicFeedState() }
     val subscriptionsFeed = remember { SubscriptionsFeedState() }
+    // The Subscriptions tab's refresh is this port's subscription check: every upload it reads that
+    // is newer than the channel's stored pointer becomes an inbox row, and the pointer moves on.
+    LaunchedEffect(subscriptionsFeed.feed) {
+        val feed = (subscriptionsFeed.feed as? LoadState.Ready)?.value ?: return@LaunchedEffect
+        if (feed.uploads.isEmpty()) return@LaunchedEffect
+        val next = inbox.observed(feed.uploads, nowMillis())
+        if (next != inbox) saveInbox(next)
+    }
     // The search page the last run left behind, so a relaunch opens on it instead of an empty one.
     val searchFeed =
         remember {
@@ -985,8 +1006,27 @@ fun App(
 
                                 AppDestination.Notifications -> {
                                     NotificationsScreen(
+                                        inbox = inbox,
+                                        nowMillis = nowMillis(),
+                                        onOpen = { entry ->
+                                            openVideo(entry.videoId, entry.title, entry.thumbnailUrl)
+                                        },
+                                        onRemove = { entry, index ->
+                                            lastRemovedInboxRow = entry to index
+                                            saveInbox(inbox.without(entry.videoId))
+                                        },
+                                        onUndoRemove = {
+                                            lastRemovedInboxRow?.let { (entry, index) ->
+                                                lastRemovedInboxRow = null
+                                                saveInbox(inbox.restoring(entry, index))
+                                            }
+                                        },
+                                        onClearAll = { saveInbox(inbox.cleared()) },
                                         onOpenSettings = { router.push(AppDestination.Settings) },
                                         onBack = { router.pop() },
+                                        onOpened = {
+                                            if (inbox.unreadCount > 0) saveInbox(inbox.markAllRead())
+                                        },
                                     )
                                 }
 
